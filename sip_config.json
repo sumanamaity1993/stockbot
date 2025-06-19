@@ -1,0 +1,50 @@
+[
+  {
+    "symbol": "PARAGPARIKH",
+    "amount": 3000,
+    "type": "mutual_fund",
+    "platform": "coin"
+  },
+  {
+    "symbol": "ICICIBLUECHIP",
+    "amount": 2500,
+    "type": "mutual_fund",
+    "platform": "coin"
+  },
+  {
+    "symbol": "UTIFLEXI",
+    "amount": 2500,
+    "type": "mutual_fund",
+    "platform": "coin"
+  },
+  {
+    "symbol": "ICICIREGSAVINGS",
+    "amount": 2000,
+    "type": "mutual_fund",
+    "platform": "coin"
+  },
+  {
+    "symbol": "SBISMALLCAP",
+    "amount": 1000,
+    "type": "mutual_fund",
+    "platform": "coin"
+  },
+  {
+    "symbol": "NIFTYBEES",
+    "quantity": 2,
+    "type": "etf",
+    "platform": "kite"
+  },
+  {
+    "symbol": "RELIANCE",
+    "quantity": 1,
+    "type": "stock",
+    "platform": "kite"
+  },
+  {
+    "symbol": "XYZ",
+    "quantity": 1,
+    "type": "abc",
+    "platform": "kite"
+  }
+]
