@@ -14,8 +14,8 @@ def get_db_connection():
         port=os.getenv("DB_PORT")
     )
 
-def init_db():
-    """Initialize database table"""
+def init_sip_orders_table():
+    """Initialize the sip_orders table"""
     conn = get_db_connection()
     cur = conn.cursor()
     

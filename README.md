@@ -9,7 +9,7 @@ A Python-based automated trading system for Systematic Investment Plans (SIP) us
 - **Market Hours Logic**: Handles regular market hours (9:15 AM - 3:30 PM) and AMO hours (5:30 AM - 9:00 AM)
 - **Database Logging**: Track all orders and their status
 - **Comprehensive Logging**: File and console logging with detailed information
-- **Modular Architecture**: Clean separation of concerns
+- **Modular Architecture**: Clean separation of concerns, reusable for Django/FastAPI
 
 ## 📋 Prerequisites
 
@@ -57,7 +57,7 @@ API_SECRET=your_kite_api_secret
 ```
 
 ### 5. Configure SIP Settings
-Edit `sip_config.json` with your desired symbols and quantities:
+Edit `sip_trader/sip_config.json` with your desired symbols and quantities:
 ```json
 [
   {
@@ -87,7 +87,7 @@ Edit `sip_config.json` with your desired symbols and quantities:
 
 #### From Project Root Directory:
 ```bash
-python -m scripts.auto_sip
+python -m sip_trader
 ```
 
 #### Important Notes:
@@ -107,7 +107,7 @@ python -m scripts.auto_sip
 
 ### Dry Run vs Real Trading Mode
 
-Edit `config.py` to switch between modes:
+Edit `sip_trader/config.py` to switch between modes:
 
 ```python
 # DRY RUN MODE
@@ -117,19 +117,19 @@ DRY_RUN = True
 ```
 
 #### To Enable Real Trading:
-1. Open `config.py`
+1. Open `sip_trader/config.py`
 2. Change `DRY_RUN = False`
 3. Ensure you're running during market hours
-4. Run the script: `python -m scripts.auto_sip`
+4. Run the script: `python -m sip_trader`
 
 #### To Enable Dry Run (Testing):
-1. Open `config.py`
+1. Open `sip_trader/config.py`
 2. Change `DRY_RUN = True`
-3. Run the script anytime: `python -m scripts.auto_sip`
+3. Run the script anytime: `python -m sip_trader`
 
 ### Logging Configuration
 
-In `config.py`, you can customize logging:
+In `logger.py` and `sip_trader/config.py`, you can customize logging:
 
 ```python
 # LOGGING
@@ -161,3 +161,101 @@ LOG_TO_CONSOLE = True
 📈 STOCKBOT SIP AUTOMATION ENDED
 ============================================================
 ```
+
+### Log Files
+- Location: `logs/sip_YYYYMMDD.log`
+- Contains detailed execution logs
+- Useful for analysis and debugging
+
+### Database Logs
+- Table: `sip_orders`
+- Fields: `id`, `timestamp`, `symbol`, `amount`, `quantity`, `order_type`, `platform`, `status`
+- Track all order attempts and results
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+#### 1. Module Import Error
+```
+ModuleNotFoundError: No module named 'postgres'
+```
+**Solution:** Always run from project root with `python -m sip_trader`
+
+#### 2. Database Connection Error
+```
+psycopg2.OperationalError: password authentication failed
+```
+**Solution:** Check your `.env` file and ensure PostgreSQL credentials are correct
+
+#### 3. Market Hours Error
+```
+AMO orders cannot be placed till 5.30 AM due to scheduled maintenance
+```
+**Solution:** Run during proper market hours or AMO hours
+
+#### 4. Authentication Error
+```
+Failed to generate session
+```
+**Solution:** Check your API credentials in `.env` file
+
+### Database Setup
+If you need to manually create the database table:
+```sql
+CREATE TABLE IF NOT EXISTS sip_orders (
+    id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMP DEFAULT NOW(),
+    symbol VARCHAR(50),
+    amount DECIMAL(10,2),
+    quantity INTEGER,
+    order_type VARCHAR(20),
+    platform VARCHAR(20),
+    status TEXT
+);
+```
+
+## 📁 Project Structure
+
+```
+stockbot/
+├── sip_trader/
+│   ├── sip_engine.py         # Main SIP engine class
+│   ├── __main__.py           # Entry point for running the bot (python -m sip_trader)
+│   ├── config.py             # Configuration settings
+│   └── sip_config.json       # SIP symbols and quantities
+├── postgres/
+│   └── __init__.py           # PostgreSQL DB connection and table setup
+├── logger.py                 # Reusable logger utility
+├── logs/                     # Log files (auto-created)
+├── .env                      # Environment variables
+├── requirements.txt          # Python dependencies
+└── README.md                 # This file
+```
+
+## 🔒 Security Notes
+
+- **Never commit** your `.env` file to version control
+- **Keep API keys secure** and rotate them regularly
+- **Use dry run mode** for testing
+- **Start with small quantities** when switching to real trading
+
+## 🚀 Next Steps
+
+- Set up automated scheduling (Windows Task Scheduler / cron)
+- Add email/Telegram notifications
+- Build FastAPI backend for web interface
+- Implement ML-based stock screening
+- Add portfolio analytics and reporting
+
+## 📞 Support
+
+For issues and questions:
+1. Check the troubleshooting section
+2. Review the logs in `logs/` directory
+3. Ensure all prerequisites are met
+4. Verify configuration files are correct
+
+---
+
+**⚠️ Disclaimer:** This is for educational purposes. Always test thoroughly before using with real money. Trading involves risk.
