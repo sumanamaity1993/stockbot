@@ -1,5 +1,7 @@
 import pandas as pd
 from trader.data import yfinance_fetcher, kite_fetcher
+from trader.data.enhanced_fetcher import EnhancedDataFetcher
+from trader.data.config import ENHANCED_DATA_CONFIG
 from postgres import get_db_connection, get_sqlalchemy_engine, init_ohlcv_data_table
 from trader.rule_based.strategies.simple_moving_average import SimpleMovingAverageStrategy
 from trader.rule_based.strategies.exponential_moving_average import ExponentialMovingAverageStrategy
@@ -21,6 +23,9 @@ class RuleBasedEngine:
             config["LOG_LEVEL"],
             log_file_prefix="rule_based"
         )
+        
+        # Initialize enhanced data fetcher
+        self.enhanced_fetcher = EnhancedDataFetcher(ENHANCED_DATA_CONFIG)
         
         # Get strategy parameters from config
         strategy_config = config.get("STRATEGY_CONFIG", {})
@@ -144,33 +149,60 @@ class RuleBasedEngine:
         conn.close()
 
     def get_data(self, symbol):
-        if self.data_source == "yfinance":
-            try:
-                df = yfinance_fetcher.fetch_ohlc(symbol, period=self.data_period)
-                if df is None or df.empty:
-                    self.logger.warning(f"No data available for {symbol}")
-                    return None
+        """
+        Enhanced data fetching with multiple sources and fallback
+        """
+        self.logger.info(f"Fetching data for {symbol} using enhanced fetcher")
+        
+        try:
+            # Use enhanced fetcher as primary method
+            df = self.enhanced_fetcher.fetch_ohlc(
+                symbol, 
+                interval='1d', 
+                period=self.data_period,
+                use_cache=True
+            )
+            
+            if df is not None and not df.empty:
+                self.logger.info(f"Successfully fetched data from enhanced fetcher for {symbol}: {len(df)} rows")
                 return df
-            except Exception as e:
-                self.logger.warning(f"yfinance failed for {symbol}: {e}")
+            
+            # Fallback to original methods if enhanced fetcher fails
+            self.logger.warning(f"Enhanced fetcher failed for {symbol}, falling back to original methods")
+            
+            if self.data_source == "yfinance":
+                try:
+                    df = yfinance_fetcher.fetch_ohlc_enhanced(symbol, period=self.data_period)
+                    if df is not None and not df.empty:
+                        self.logger.info(f"Successfully fetched data from yfinance for {symbol}")
+                        return df
+                except Exception as e:
+                    self.logger.warning(f"yfinance failed for {symbol}: {e}")
+                
+                # Try kite as last resort
                 self.logger.info("Falling back to Kite API...")
                 try:
                     return kite_fetcher.fetch_ohlc(symbol, interval='day')
                 except Exception as kite_error:
-                    self.logger.error(f"Both yfinance and Kite failed for {symbol}: {kite_error}")
+                    self.logger.error(f"All data sources failed for {symbol}: {kite_error}")
                     return None
-        elif self.data_source == "kite":
-            try:
-                return kite_fetcher.fetch_ohlc(symbol, interval='day')
-            except Exception as e:
-                self.logger.error(f"Kite failed for {symbol}: {e}")
-                return None
-        else:
-            raise ValueError(f"Unknown data source: {self.data_source}")
+                    
+            elif self.data_source == "kite":
+                try:
+                    return kite_fetcher.fetch_ohlc(symbol, interval='day')
+                except Exception as e:
+                    self.logger.error(f"Kite failed for {symbol}: {e}")
+                    return None
+            else:
+                raise ValueError(f"Unknown data source: {self.data_source}")
+                
+        except Exception as e:
+            self.logger.error(f"Error in enhanced data fetching for {symbol}: {e}")
+            return None
 
     def run(self):
         init_ohlcv_data_table()
-        self.logger.info(f"Running rule-based trading for symbols: {self.symbols} using {self.data_source}")
+        self.logger.info(f"Running rule-based trading for symbols: {self.symbols} using enhanced data fetcher")
         results = {}
         successful_symbols = 0
         failed_symbols = 0
@@ -199,24 +231,25 @@ class RuleBasedEngine:
                 results[symbol] = signals
                 successful_symbols += 1
                 
-                # Track symbols with signals
                 if signals:
-                    symbols_with_signals.append((symbol, signals))
+                    symbols_with_signals.append(symbol)
             else:
-                self.logger.warning(f"Skipping {symbol} - no data available")
-                results[symbol] = []
                 failed_symbols += 1
+                self.logger.error(f"Failed to get data for {symbol}")
         
-        # Print summary
-        self.logger.info("=" * 80)
-        self.logger.info("📊 TRADING SIGNALS SUMMARY")
-        self.logger.info("=" * 80)
+        # Summary
+        self.logger.info("=" * 60)
+        self.logger.info("RULE-BASED TRADING SUMMARY")
+        self.logger.info("=" * 60)
+        self.logger.info(f"Total symbols processed: {len(self.symbols)}")
+        self.logger.info(f"✅ Successful: {successful_symbols}")
+        self.logger.info(f"❌ Failed: {failed_symbols}")
+        self.logger.info(f"Symbols with signals: {len(symbols_with_signals)}")
         
         if symbols_with_signals:
-            self.logger.info(f"🎯 Found {len(symbols_with_signals)} symbols with trading signals:")
-            self.logger.info("-" * 80)
-            
-            for symbol, signals in symbols_with_signals:
+            self.logger.info("Symbols with trading signals:")
+            for symbol in symbols_with_signals:
+                signals = results[symbol]
                 signal_details = []
                 for signal_type, strategy_name in signals:
                     if signal_type == 'buy':
@@ -226,20 +259,20 @@ class RuleBasedEngine:
                     else:
                         signal_details.append(f"⚪ {signal_type.upper()} ({strategy_name})")
                 
-                self.logger.info(f"📈 {symbol}: {' | '.join(signal_details)}")
-            
-            self.logger.info("-" * 80)
-            self.logger.info(f"💡 Total trading opportunities: {len(symbols_with_signals)}")
+                signal_str = " | ".join(signal_details)
+                self.logger.info(f"  📈 {symbol}: {signal_str}")
             
             # Count buy vs sell signals
-            buy_signals = sum(1 for _, signals in symbols_with_signals 
-                            for signal_type, _ in signals if signal_type == 'buy')
-            sell_signals = sum(1 for _, signals in symbols_with_signals 
-                             for signal_type, _ in signals if signal_type == 'sell')
+            buy_signals = sum(1 for symbol in symbols_with_signals 
+                            for signal_type, _ in results[symbol] if signal_type == 'buy')
+            sell_signals = sum(1 for symbol in symbols_with_signals 
+                             for signal_type, _ in results[symbol] if signal_type == 'sell')
             
-            self.logger.info(f"🟢 Buy signals: {buy_signals}")
-            self.logger.info(f"🔴 Sell signals: {sell_signals}")
-            
+            self.logger.info("")
+            self.logger.info("Signal Summary:")
+            self.logger.info(f"  🟢 Buy signals: {buy_signals}")
+            self.logger.info(f"  🔴 Sell signals: {sell_signals}")
+            self.logger.info(f"  📊 Total signals: {buy_signals + sell_signals}")
         else:
             self.logger.info("😴 No trading signals found in current market conditions")
             self.logger.info("💡 Consider:")
@@ -247,11 +280,8 @@ class RuleBasedEngine:
             self.logger.info("   • Enabling additional strategies (EMA, RSI, MACD)")
             self.logger.info("   • Checking different time periods")
         
-        self.logger.info("-" * 80)
-        self.logger.info(f"📊 Processing Summary:")
-        self.logger.info(f"   ✅ Successful: {successful_symbols} symbols")
-        self.logger.info(f"   ❌ Failed: {failed_symbols} symbols")
-        self.logger.info(f"   📈 Total analyzed: {successful_symbols + failed_symbols} symbols")
-        self.logger.info("=" * 80)
+        # Cache statistics
+        cache_stats = self.enhanced_fetcher.get_cache_stats()
+        self.logger.info(f"Cache statistics: {cache_stats['cache_size']} entries, duration: {cache_stats['cache_duration']}s")
         
         return results 

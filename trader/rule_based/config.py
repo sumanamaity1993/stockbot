@@ -150,18 +150,18 @@ RULE_BASED_CONFIG = {
         "SMA_LONG_WINDOW": 50,   # Long-term SMA period
         
         # Exponential Moving Average Strategy
-        "USE_EMA": False,  # Enable/disable EMA strategy
+        "USE_EMA": True,  # Enable/disable EMA strategy
         "EMA_SHORT_WINDOW": 12,  # Short-term EMA period
         "EMA_LONG_WINDOW": 26,   # Long-term EMA period
         
         # RSI Strategy
-        "USE_RSI": False,  # Enable/disable RSI strategy
+        "USE_RSI": True,  # Enable/disable RSI strategy
         "RSI_PERIOD": 14,  # RSI calculation period
         "RSI_OVERSOLD": 30,  # Oversold threshold for buy signals
         "RSI_OVERBOUGHT": 70,  # Overbought threshold for sell signals
         
         # MACD Strategy
-        "USE_MACD": False,  # Enable/disable MACD strategy
+        "USE_MACD": True,  # Enable/disable MACD strategy
         "MACD_FAST_PERIOD": 12,  # Fast EMA period
         "MACD_SLOW_PERIOD": 26,  # Slow EMA period
         "MACD_SIGNAL_PERIOD": 9,  # Signal line period
