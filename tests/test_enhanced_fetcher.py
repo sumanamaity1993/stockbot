@@ -10,13 +10,12 @@ This script demonstrates the enhanced data fetching capabilities including:
 - Real-time price fetching
 """
 
-import os
 import sys
-from datetime import datetime
-import pandas as pd
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Add the project root to the path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+import pandas as pd
+from datetime import datetime
 
 from trader.data.enhanced_fetcher import EnhancedDataFetcher
 from trader.data.data_quality import DataQualityAnalyzer

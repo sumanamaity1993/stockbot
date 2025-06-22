@@ -1,13 +1,14 @@
 import pandas as pd
-from trader.data import yfinance_fetcher, kite_fetcher
 from trader.data.enhanced_fetcher import EnhancedDataFetcher
 from trader.data.config import ENHANCED_DATA_CONFIG
-from postgres import get_db_connection, get_sqlalchemy_engine, init_ohlcv_data_table
+from postgres import get_sqlalchemy_engine, init_trading_signals_tables, store_classic_engine_signals, store_trading_analysis_history
 from trader.rule_based.strategies.simple_moving_average import SimpleMovingAverageStrategy
 from trader.rule_based.strategies.exponential_moving_average import ExponentialMovingAverageStrategy
 from trader.rule_based.strategies.rsi_strategy import RSIStrategy
 from trader.rule_based.strategies.macd_strategy import MACDStrategy
+from trader.data.data_quality import DataQualityAnalyzer
 from logger import get_logger
+import time
 
 class RuleBasedEngine:
     def __init__(self, config, strategies=None):
@@ -21,46 +22,38 @@ class RuleBasedEngine:
             config["LOG_TO_FILE"],
             config["LOG_TO_CONSOLE"],
             config["LOG_LEVEL"],
-            log_file_prefix="rule_based"
+            log_file_prefix="rule_based_classic_engine"
         )
         
         # Initialize enhanced data fetcher
-        self.enhanced_fetcher = EnhancedDataFetcher(ENHANCED_DATA_CONFIG)
+        self.enhanced_fetcher = EnhancedDataFetcher(self.config.get("ENGINE_CONFIG", {}))
+        
+        # Initialize data quality analyzer
+        self.data_analyzer = DataQualityAnalyzer(self.config.get("ENGINE_CONFIG", {}))
         
         # Get strategy parameters from config
-        strategy_config = config.get("STRATEGY_CONFIG", {})
+        strategies_config = config.get("STRATEGIES", [])
         
         if strategies is None:
-            # Create default strategies based on config
+            # Create strategies based on new config format
             self.strategies = []
             
-            # Add SMA strategy if enabled
-            if strategy_config.get("USE_SMA", True):
-                short_window = strategy_config.get("SMA_SHORT_WINDOW", 20)
-                long_window = strategy_config.get("SMA_LONG_WINDOW", 50)
-                self.strategies.append(SimpleMovingAverageStrategy(short_window=short_window, long_window=long_window))
+            for strategy_config in strategies_config:
+                strategy_name = strategy_config.get("name")
+                params = strategy_config.get("params", {})
+                
+                if strategy_name == "SimpleMovingAverageStrategy":
+                    self.strategies.append(SimpleMovingAverageStrategy(**params))
+                elif strategy_name == "ExponentialMovingAverageStrategy":
+                    self.strategies.append(ExponentialMovingAverageStrategy(**params))
+                elif strategy_name == "RSIStrategy":
+                    self.strategies.append(RSIStrategy(**params))
+                elif strategy_name == "MACDStrategy":
+                    self.strategies.append(MACDStrategy(**params))
+                else:
+                    self.logger.warning(f"Unknown strategy: {strategy_name}")
             
-            # Add EMA strategy if enabled
-            if strategy_config.get("USE_EMA", False):
-                short_window = strategy_config.get("EMA_SHORT_WINDOW", 12)
-                long_window = strategy_config.get("EMA_LONG_WINDOW", 26)
-                self.strategies.append(ExponentialMovingAverageStrategy(short_window=short_window, long_window=long_window))
-            
-            # Add RSI strategy if enabled
-            if strategy_config.get("USE_RSI", False):
-                period = strategy_config.get("RSI_PERIOD", 14)
-                oversold = strategy_config.get("RSI_OVERSOLD", 30)
-                overbought = strategy_config.get("RSI_OVERBOUGHT", 70)
-                self.strategies.append(RSIStrategy(period=period, oversold=oversold, overbought=overbought))
-            
-            # Add MACD strategy if enabled
-            if strategy_config.get("USE_MACD", False):
-                fast_period = strategy_config.get("MACD_FAST_PERIOD", 12)
-                slow_period = strategy_config.get("MACD_SLOW_PERIOD", 26)
-                signal_period = strategy_config.get("MACD_SIGNAL_PERIOD", 9)
-                self.strategies.append(MACDStrategy(fast_period=fast_period, slow_period=slow_period, signal_period=signal_period))
-            
-            # If no strategies enabled, use default SMA
+            # If no strategies configured, use default SMA
             if not self.strategies:
                 self.strategies = [SimpleMovingAverageStrategy()]
         else:
@@ -68,6 +61,9 @@ class RuleBasedEngine:
             
         self.logger.info(f"Initialized with {len(self.strategies)} strategies: {[s.__class__.__name__ for s in self.strategies]}")
         self.engine = get_sqlalchemy_engine()
+        
+        # Initialize trading signals tables
+        init_trading_signals_tables()
 
     def evaluate(self, data):
         signals = []
@@ -78,152 +74,96 @@ class RuleBasedEngine:
                 signals.append(('sell', strategy.__class__.__name__))
         return signals
 
-    def fetch_data_from_db(self, symbol):
-        query = """
-            SELECT date, open, high, low, close, volume
-            FROM ohlcv_data
-            WHERE symbol = %(symbol)s
-            ORDER BY date ASC
-        """
-        df = pd.read_sql(query, self.engine, params={"symbol": symbol})
-        return df
-
-    def get_scalar(self, val):
-        """Robustly extract a scalar value from a pandas Series, numpy array, or other iterable."""
-        # If it's a pandas Series, get the first element
-        if isinstance(val, pd.Series):
-            val = val.iloc[0]
-        # If it's a numpy generic or has item() method, convert to Python scalar
-        if hasattr(val, 'item'):
-            try:
-                val = val.item()
-            except Exception:
-                pass
-        # If it's still iterable (but not a string/bytes), get first element
-        if hasattr(val, '__iter__') and not isinstance(val, (str, bytes)):
-            try:
-                val = next(iter(val))
-            except Exception:
-                pass
-        return val
-
-    def dump_data_to_db(self, symbol, df):
-        conn = get_db_connection()
-        cur = conn.cursor()
-        for _, row in df.iterrows():
-            # Extract and convert each value, with debug prints
-            self.logger.debug(f"Raw types before conversion - date: {type(row['date'])}, open: {type(row['open'])}")
-            
-            date_val = self.get_scalar(row['date'])
-            if hasattr(date_val, 'to_pydatetime'):
-                date_val = date_val.to_pydatetime()
-            
-            try:
-                open_val = float(self.get_scalar(row['open']))
-                high_val = float(self.get_scalar(row['high']))
-                low_val = float(self.get_scalar(row['low']))
-                close_val = float(self.get_scalar(row['close']))
-                volume_val = int(self.get_scalar(row['volume']))
-            except Exception as e:
-                self.logger.error(f"Conversion error for {symbol}: {e}")
-                self.logger.error(f"Values: open={row['open']}, high={row['high']}, low={row['low']}, close={row['close']}, volume={row['volume']}")
-                raise
-
-            # Debug print final types
-            self.logger.debug(
-                f"Final types - date: {type(date_val)}, open: {type(open_val)}, "
-                f"high: {type(high_val)}, low: {type(low_val)}, "
-                f"close: {type(close_val)}, volume: {type(volume_val)}"
-            )
-
-            cur.execute(
-                """
-                INSERT INTO ohlcv_data (symbol, date, open, high, low, close, volume)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (symbol, date) DO NOTHING
-                """,
-                (symbol, date_val, open_val, high_val, low_val, close_val, volume_val)
-            )
-        conn.commit()
-        cur.close()
-        conn.close()
-
     def get_data(self, symbol):
         """
-        Enhanced data fetching with multiple sources and fallback
+        Enhanced data fetching using only the enhanced fetcher with quality validation
         """
         self.logger.info(f"Fetching data for {symbol} using enhanced fetcher")
         
         try:
-            # Use enhanced fetcher as primary method
-            df = self.enhanced_fetcher.fetch_ohlc(
+            # Get sources from config
+            sources = self.config.get("ENGINE_CONFIG", {}).get("DATA_SOURCES", ['yfinance', 'alpha_vantage', 'polygon'])
+            
+            # First try to load from individual source databases
+            if self.db_dump:
+                for source in sources:
+                    db_result = self.enhanced_fetcher.load_from_source_db(
+                        symbol, 
+                        source,
+                        days_fresh=1
+                    )
+                    
+                    if db_result is not None:
+                        df = db_result['data']
+                        source = db_result['source']
+                        
+                        # Quality check for DB data
+                        quality = self.data_analyzer.analyze_data_quality(df, symbol)
+                        self.logger.info(f"Loaded data from DB for {symbol} (source: {source}). Quality score: {quality['quality_score']:.2f}")
+                        
+                        # Skip if quality is very low
+                        if quality['quality_score'] < 0.5:
+                            self.logger.warning(f"Very low quality data for {symbol} from {source} DB: {quality['quality_score']:.2f}")
+                            continue
+                        
+                        return df
+            
+            # Fetch fresh data using enhanced fetcher
+            result = self.enhanced_fetcher.fetch_ohlc(
                 symbol, 
                 interval='1d', 
                 period=self.data_period,
-                use_cache=True
+                sources=sources,
+                use_cache=True,
+                save_to_db=self.db_dump
             )
             
-            if df is not None and not df.empty:
-                self.logger.info(f"Successfully fetched data from enhanced fetcher for {symbol}: {len(df)} rows")
+            if result is not None:
+                df = result['data']
+                source = result['source']
+                
+                # Quality check for fresh data
+                quality = self.data_analyzer.analyze_data_quality(df, symbol)
+                self.logger.info(f"Successfully fetched data for {symbol} from {source}: {len(df)} rows. Quality score: {quality['quality_score']:.2f}")
+                
+                # Log quality issues if any
+                if quality['quality_score'] < 0.7:
+                    self.logger.warning(f"Low quality data for {symbol} from {source}: {quality['quality_score']:.2f}")
+                    if quality.get('recommendations'):
+                        for rec in quality['recommendations']:
+                            self.logger.warning(f"  - {rec}")
+                
+                # Skip if quality is very low
+                if quality['quality_score'] < 0.5:
+                    self.logger.error(f"Very low quality data for {symbol} from {source}: {quality['quality_score']:.2f}. Skipping trading.")
+                    return None
+                
                 return df
             
-            # Fallback to original methods if enhanced fetcher fails
-            self.logger.warning(f"Enhanced fetcher failed for {symbol}, falling back to original methods")
-            
-            if self.data_source == "yfinance":
-                try:
-                    df = yfinance_fetcher.fetch_ohlc_enhanced(symbol, period=self.data_period)
-                    if df is not None and not df.empty:
-                        self.logger.info(f"Successfully fetched data from yfinance for {symbol}")
-                        return df
-                except Exception as e:
-                    self.logger.warning(f"yfinance failed for {symbol}: {e}")
-                
-                # Try kite as last resort
-                self.logger.info("Falling back to Kite API...")
-                try:
-                    return kite_fetcher.fetch_ohlc(symbol, interval='day')
-                except Exception as kite_error:
-                    self.logger.error(f"All data sources failed for {symbol}: {kite_error}")
-                    return None
-                    
-            elif self.data_source == "kite":
-                try:
-                    return kite_fetcher.fetch_ohlc(symbol, interval='day')
-                except Exception as e:
-                    self.logger.error(f"Kite failed for {symbol}: {e}")
-                    return None
-            else:
-                raise ValueError(f"Unknown data source: {self.data_source}")
+            self.logger.error(f"Failed to fetch data for {symbol} from enhanced fetcher")
+            return None
                 
         except Exception as e:
             self.logger.error(f"Error in enhanced data fetching for {symbol}: {e}")
             return None
 
     def run(self):
-        init_ohlcv_data_table()
+        start_time = time.time()
         self.logger.info(f"Running rule-based trading for symbols: {self.symbols} using enhanced data fetcher")
         results = {}
         successful_symbols = 0
         failed_symbols = 0
         symbols_with_signals = []
+        total_signals = 0
+        buy_signals = 0
+        sell_signals = 0
         
         for symbol in self.symbols:
+            symbol_start_time = time.time()
             self.logger.info(f"Processing {symbol}")
-            df = None
-            if self.db_dump:
-                try:
-                    df = self.fetch_data_from_db(symbol)
-                    if not df.empty:
-                        self.logger.info("Loaded data from DB.")
-                except Exception as e:
-                    self.logger.warning(f"DB load failed for {symbol}: {e}")
-                    df = None
-            if df is None or df.empty:
-                df = self.get_data(symbol)
-                if df is not None and not df.empty and self.db_dump:
-                    self.dump_data_to_db(symbol, df)
-                    self.logger.info("Dumped data to DB.")
+            
+            # Get data using enhanced fetcher (handles DB loading and saving)
+            df = self.get_data(symbol)
             
             if df is not None and not df.empty:
                 signals = self.evaluate(df)
@@ -231,11 +171,68 @@ class RuleBasedEngine:
                 results[symbol] = signals
                 successful_symbols += 1
                 
+                # Count signals
+                for signal_type, strategy_name in signals:
+                    total_signals += 1
+                    if signal_type == 'buy':
+                        buy_signals += 1
+                    elif signal_type == 'sell':
+                        sell_signals += 1
+                
                 if signals:
                     symbols_with_signals.append(symbol)
+                
+                # Store individual symbol analysis
+                symbol_execution_time = int((time.time() - symbol_start_time) * 1000)
+                data_source = "enhanced_fetcher"  # Default source
+                data_quality_score = 0.0  # Will be updated if available
+                data_points = len(df)
+                
+                # Try to get data source and quality from enhanced fetcher
+                try:
+                    # This would need to be passed from get_data method
+                    # For now, using defaults
+                    pass
+                except:
+                    pass
+                
+                # Store classic engine signals
+                store_classic_engine_signals(
+                    symbol=symbol,
+                    data_source=data_source,
+                    data_quality_score=data_quality_score,
+                    data_points=data_points,
+                    period=self.data_period,
+                    signals=signals,
+                    strategies=[s.__class__.__name__ for s in self.strategies],
+                    analysis_summary=f"Classic engine analysis for {symbol}",
+                    execution_time_ms=symbol_execution_time,
+                    cache_hit=self.db_dump  # Simplified cache hit detection
+                )
             else:
                 failed_symbols += 1
-                self.logger.error(f"Failed to get data for {symbol}")
+        
+        # Calculate execution time
+        execution_time_ms = int((time.time() - start_time) * 1000)
+        
+        # Store overall analysis history
+        store_trading_analysis_history(
+            engine_type="classic",
+            symbols_processed=len(self.symbols),
+            successful_symbols=successful_symbols,
+            failed_symbols=failed_symbols,
+            total_signals=total_signals,
+            buy_signals=buy_signals,
+            sell_signals=sell_signals,
+            hold_signals=0,  # Classic engine doesn't generate hold signals
+            execution_time_ms=execution_time_ms,
+            config_used={
+                "symbols": self.symbols,
+                "data_period": self.data_period,
+                "strategies": [s.__class__.__name__ for s in self.strategies],
+                "db_dump": self.db_dump
+            }
+        )
         
         # Summary
         self.logger.info("=" * 60)
@@ -250,29 +247,11 @@ class RuleBasedEngine:
             self.logger.info("Symbols with trading signals:")
             for symbol in symbols_with_signals:
                 signals = results[symbol]
-                signal_details = []
+                signal_summary = []
                 for signal_type, strategy_name in signals:
-                    if signal_type == 'buy':
-                        signal_details.append(f"🟢 BUY ({strategy_name})")
-                    elif signal_type == 'sell':
-                        signal_details.append(f"🔴 SELL ({strategy_name})")
-                    else:
-                        signal_details.append(f"⚪ {signal_type.upper()} ({strategy_name})")
-                
-                signal_str = " | ".join(signal_details)
-                self.logger.info(f"  📈 {symbol}: {signal_str}")
-            
-            # Count buy vs sell signals
-            buy_signals = sum(1 for symbol in symbols_with_signals 
-                            for signal_type, _ in results[symbol] if signal_type == 'buy')
-            sell_signals = sum(1 for symbol in symbols_with_signals 
-                             for signal_type, _ in results[symbol] if signal_type == 'sell')
-            
-            self.logger.info("")
-            self.logger.info("Signal Summary:")
-            self.logger.info(f"  🟢 Buy signals: {buy_signals}")
-            self.logger.info(f"  🔴 Sell signals: {sell_signals}")
-            self.logger.info(f"  📊 Total signals: {buy_signals + sell_signals}")
+                    dot = "🟢" if signal_type == 'buy' else "🔴"
+                    signal_summary.append(f"{dot} {signal_type.upper()} ({strategy_name})")
+                self.logger.info(f"   📈 {symbol}: {' | '.join(signal_summary)}")
         else:
             self.logger.info("😴 No trading signals found in current market conditions")
             self.logger.info("💡 Consider:")
@@ -283,5 +262,7 @@ class RuleBasedEngine:
         # Cache statistics
         cache_stats = self.enhanced_fetcher.get_cache_stats()
         self.logger.info(f"Cache statistics: {cache_stats['cache_size']} entries, duration: {cache_stats['cache_duration']}s")
+        
+        self.logger.info(f"✅ Engine execution completed successfully")
         
         return results 

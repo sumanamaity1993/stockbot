@@ -1,40 +1,97 @@
-import yfinance as yf
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from logger import get_logger
-import sys
 import os
+from dotenv import load_dotenv
+import sys
 
 # Add the project root to the path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from postgres import store_ohlcv_data, load_ohlcv_data, check_data_freshness
 
-def fetch_ohlc(symbol, interval='1d', period='6mo'):
+# Load environment variables
+load_dotenv()
+
+def get_polygon_client():
+    """Get Polygon.io client with API key"""
+    try:
+        from polygon import RESTClient
+        
+        api_key = os.getenv('POLYGON_API_KEY')
+        if not api_key:
+            return None
+            
+        return RESTClient(api_key)
+    except ImportError:
+        return None
+    except Exception as e:
+        return None
+
+def fetch_ohlc(symbol, interval='day', period='6mo'):
     """
-    Fetch OHLC data for a symbol using yfinance.
+    Fetch OHLC data for a symbol using Polygon.io.
     Returns a pandas DataFrame with columns: ['date', 'open', 'high', 'low', 'close', 'volume']
     """
-    logger = get_logger(__name__, log_file_prefix="yfinance_fetcher")
+    logger = get_logger(__name__, log_file_prefix="polygon_fetcher")
     
     try:
         logger.info(f"Fetching data for {symbol} (interval: {interval}, period: {period})")
         
-        # Fetch data from yfinance with explicit auto_adjust parameter
-        df = yf.download(symbol, interval=interval, period=period, progress=False, auto_adjust=True)
+        # Get Polygon client
+        client = get_polygon_client()
+        if not client:
+            logger.error("Polygon.io client not available. Check API key and installation.")
+            return None
         
-        if df is None or df.empty:
+        # Calculate date range based on period
+        end_date = datetime.now()
+        if period == '6mo':
+            start_date = end_date - timedelta(days=180)
+        elif period == '1y':
+            start_date = end_date - timedelta(days=365)
+        elif period == '3mo':
+            start_date = end_date - timedelta(days=90)
+        elif period == '1mo':
+            start_date = end_date - timedelta(days=30)
+        else:
+            start_date = end_date - timedelta(days=30)  # Default to 1 month
+        
+        # Convert interval to Polygon format
+        interval_map = {'day': 'day', 'hour': 'hour', 'minute': 'minute'}
+        polygon_interval = interval_map.get(interval, 'day')
+        
+        # Fetch data from Polygon.io
+        data = client.get_aggs(
+            ticker=symbol,
+            multiplier=1,
+            timespan=polygon_interval,
+            from_=start_date.strftime('%Y-%m-%d'),
+            to=end_date.strftime('%Y-%m-%d')
+        )
+        
+        if not data:
             logger.warning(f"No data returned for {symbol}")
             return None
         
-        # Reset index to make date a column
-        df = df.reset_index()
+        # Convert to DataFrame
+        df_data = []
+        for bar in data:
+            df_data.append({
+                'date': pd.to_datetime(bar.timestamp, unit='ms'),
+                'open': bar.open,
+                'high': bar.high,
+                'low': bar.low,
+                'close': bar.close,
+                'volume': bar.volume
+            })
         
-        # Rename columns to lowercase
-        df.rename(columns={
-            'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close', 'Volume': 'volume', 'Date': 'date'
-        }, inplace=True)
+        df = pd.DataFrame(df_data)
+        
+        if df.empty:
+            logger.warning(f"Empty DataFrame for {symbol}")
+            return None
         
         # Ensure date column is datetime
         if 'date' in df.columns:
@@ -64,7 +121,7 @@ def fetch_ohlc(symbol, interval='1d', period='6mo'):
         logger.error(f"Error fetching data for {symbol}: {e}")
         return None
 
-def fetch_ohlc_with_db_cache(symbol, interval='1d', period='6mo', force_fetch=False):
+def fetch_ohlc_with_db_cache(symbol, interval='day', period='6mo', force_fetch=False):
     """
     Fetch OHLC data with database caching.
     First checks if data exists in DB and is fresh, otherwise fetches from API.
@@ -78,26 +135,26 @@ def fetch_ohlc_with_db_cache(symbol, interval='1d', period='6mo', force_fetch=Fa
     Returns:
         pandas DataFrame or None: OHLCV data
     """
-    logger = get_logger(__name__, log_file_prefix="yfinance_fetcher")
+    logger = get_logger(__name__, log_file_prefix="polygon_fetcher")
     
     try:
         # Check if we should use cached data
         if not force_fetch:
             # Check if data exists and is fresh in DB
-            if check_data_freshness(symbol, 'yfinance', days_threshold=1):
+            if check_data_freshness(symbol, 'polygon', days_threshold=1):
                 logger.info(f"Using cached data for {symbol} from database")
-                df = load_ohlcv_data(symbol, 'yfinance')
+                df = load_ohlcv_data(symbol, 'polygon')
                 if df is not None and not df.empty:
                     return df
         
         # Fetch fresh data from API
-        logger.info(f"Fetching fresh data for {symbol} from yfinance API")
+        logger.info(f"Fetching fresh data for {symbol} from Polygon.io API")
         df = fetch_ohlc(symbol, interval, period)
         
         if df is not None and not df.empty:
             # Store in database
             logger.info(f"Storing {len(df)} records for {symbol} in database")
-            store_ohlcv_data(df, 'yfinance', symbol)
+            store_ohlcv_data(df, 'polygon', symbol)
         
         return df
         
@@ -105,7 +162,7 @@ def fetch_ohlc_with_db_cache(symbol, interval='1d', period='6mo', force_fetch=Fa
         logger.error(f"Error in fetch_ohlc_with_db_cache for {symbol}: {e}")
         return None
 
-def fetch_ohlc_enhanced(symbol, interval='1d', period='6mo', validate_data=True):
+def fetch_ohlc_enhanced(symbol, interval='day', period='6mo', validate_data=True):
     """
     Enhanced version of fetch_ohlc with data validation and quality checks.
     
@@ -118,7 +175,7 @@ def fetch_ohlc_enhanced(symbol, interval='1d', period='6mo', validate_data=True)
     Returns:
         pandas DataFrame or None: OHLCV data
     """
-    logger = get_logger(__name__, log_file_prefix="yfinance_fetcher")
+    logger = get_logger(__name__, log_file_prefix="polygon_fetcher")
     
     try:
         # Use DB cache version
@@ -150,7 +207,7 @@ def _validate_ohlc_data(df: pd.DataFrame, symbol: str) -> bool:
     Returns:
         bool: True if data is valid
     """
-    logger = get_logger(__name__, log_file_prefix="yfinance_fetcher")
+    logger = get_logger(__name__, log_file_prefix="polygon_fetcher")
     
     try:
         # Check minimum data points
@@ -205,7 +262,7 @@ def _validate_ohlc_data(df: pd.DataFrame, symbol: str) -> bool:
 
 def get_stock_info(symbol: str) -> Optional[Dict[str, Any]]:
     """
-    Get comprehensive stock information
+    Get comprehensive stock information from Polygon.io
     
     Args:
         symbol: Stock symbol
@@ -213,34 +270,30 @@ def get_stock_info(symbol: str) -> Optional[Dict[str, Any]]:
     Returns:
         Dict or None: Stock information
     """
-    logger = get_logger(__name__, log_file_prefix="yfinance_fetcher")
+    logger = get_logger(__name__, log_file_prefix="polygon_fetcher")
     
     try:
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
+        client = get_polygon_client()
+        if not client:
+            return None
         
-        if not info or len(info) < 5:  # Basic check for valid info
-            logger.warning(f"No valid info returned for {symbol}")
+        # Get ticker details
+        ticker_details = client.get_ticker_details(symbol)
+        
+        if not ticker_details:
+            logger.warning(f"No ticker details available for {symbol}")
             return None
         
         # Extract key information
         stock_info = {
             'symbol': symbol,
-            'name': info.get('longName', info.get('shortName', symbol)),
-            'sector': info.get('sector'),
-            'industry': info.get('industry'),
-            'market_cap': info.get('marketCap'),
-            'current_price': info.get('currentPrice', info.get('regularMarketPrice')),
-            'pe_ratio': info.get('trailingPE'),
-            'pb_ratio': info.get('priceToBook'),
-            'dividend_yield': info.get('dividendYield'),
-            'volume': info.get('volume'),
-            'avg_volume': info.get('averageVolume'),
-            'fifty_two_week_high': info.get('fiftyTwoWeekHigh'),
-            'fifty_two_week_low': info.get('fiftyTwoWeekLow'),
-            'currency': info.get('currency'),
-            'exchange': info.get('exchange'),
-            'country': info.get('country'),
+            'name': ticker_details.name,
+            'sector': getattr(ticker_details, 'sector', None),
+            'industry': getattr(ticker_details, 'industry', None),
+            'market_cap': getattr(ticker_details, 'market_cap', None),
+            'currency': getattr(ticker_details, 'currency_name', None),
+            'exchange': getattr(ticker_details, 'primary_exchange', None),
+            'country': getattr(ticker_details, 'locale', None),
             'timestamp': datetime.now()
         }
         
@@ -253,7 +306,7 @@ def get_stock_info(symbol: str) -> Optional[Dict[str, Any]]:
 
 def get_real_time_price(symbol: str) -> Optional[Dict[str, Any]]:
     """
-    Get real-time price information
+    Get real-time price information from Polygon.io
     
     Args:
         symbol: Stock symbol
@@ -261,29 +314,29 @@ def get_real_time_price(symbol: str) -> Optional[Dict[str, Any]]:
     Returns:
         Dict or None: Real-time price data
     """
-    logger = get_logger(__name__, log_file_prefix="yfinance_fetcher")
+    logger = get_logger(__name__, log_file_prefix="polygon_fetcher")
     
     try:
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
+        client = get_polygon_client()
+        if not client:
+            return None
         
-        if 'regularMarketPrice' in info and info['regularMarketPrice']:
-            price_data = {
-                'symbol': symbol,
-                'price': info['regularMarketPrice'],
-                'change': info.get('regularMarketChange', 0),
-                'change_percent': info.get('regularMarketChangePercent', 0),
-                'volume': info.get('volume', 0),
-                'market_cap': info.get('marketCap'),
-                'pe_ratio': info.get('trailingPE'),
-                'timestamp': datetime.now()
-            }
-            
-            logger.debug(f"Retrieved real-time price for {symbol}: ${price_data['price']}")
-            return price_data
+        # Get last trade
+        last_trade = client.get_last_trade(symbol)
         
-        logger.warning(f"No real-time price available for {symbol}")
-        return None
+        if not last_trade:
+            logger.warning(f"No real-time price available for {symbol}")
+            return None
+        
+        price_data = {
+            'symbol': symbol,
+            'price': last_trade.price,
+            'volume': last_trade.size,
+            'timestamp': datetime.now()
+        }
+        
+        logger.debug(f"Retrieved real-time price for {symbol}: ${price_data['price']}")
+        return price_data
         
     except Exception as e:
         logger.error(f"Error getting real-time price for {symbol}: {e}")

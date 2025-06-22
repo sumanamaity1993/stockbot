@@ -1,28 +1,58 @@
-import yfinance as yf
 import pandas as pd
 from datetime import datetime
 from typing import Optional, Dict, Any
 from logger import get_logger
-import sys
 import os
+from dotenv import load_dotenv
+import sys
 
 # Add the project root to the path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from postgres import store_ohlcv_data, load_ohlcv_data, check_data_freshness
 
-def fetch_ohlc(symbol, interval='1d', period='6mo'):
+# Load environment variables
+load_dotenv()
+
+def get_alpha_vantage_client():
+    """Get Alpha Vantage client with API key"""
+    try:
+        from alpha_vantage.timeseries import TimeSeries
+        
+        api_key = os.getenv('ALPHA_VANTAGE_API_KEY')
+        if not api_key:
+            return None
+            
+        return TimeSeries(key=api_key, output_format='pandas')
+    except ImportError:
+        return None
+    except Exception as e:
+        return None
+
+def fetch_ohlc(symbol, interval='daily', period='6mo'):
     """
-    Fetch OHLC data for a symbol using yfinance.
+    Fetch OHLC data for a symbol using Alpha Vantage.
     Returns a pandas DataFrame with columns: ['date', 'open', 'high', 'low', 'close', 'volume']
     """
-    logger = get_logger(__name__, log_file_prefix="yfinance_fetcher")
+    logger = get_logger(__name__, log_file_prefix="alpha_vantage_fetcher")
     
     try:
         logger.info(f"Fetching data for {symbol} (interval: {interval}, period: {period})")
         
-        # Fetch data from yfinance with explicit auto_adjust parameter
-        df = yf.download(symbol, interval=interval, period=period, progress=False, auto_adjust=True)
+        # Get Alpha Vantage client
+        client = get_alpha_vantage_client()
+        if not client:
+            logger.error("Alpha Vantage client not available. Check API key and installation.")
+            return None
+        
+        # Fetch data from Alpha Vantage
+        if interval == 'daily':
+            df, meta = client.get_daily(symbol, outputsize='compact')
+        elif interval == 'intraday':
+            df, meta = client.get_intraday(symbol, outputsize='compact')
+        else:
+            logger.warning(f"Unsupported interval: {interval}. Using daily.")
+            df, meta = client.get_daily(symbol, outputsize='compact')
         
         if df is None or df.empty:
             logger.warning(f"No data returned for {symbol}")
@@ -31,10 +61,18 @@ def fetch_ohlc(symbol, interval='1d', period='6mo'):
         # Reset index to make date a column
         df = df.reset_index()
         
-        # Rename columns to lowercase
-        df.rename(columns={
-            'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close', 'Volume': 'volume', 'Date': 'date'
-        }, inplace=True)
+        # Rename columns to standard format
+        column_mapping = {
+            '1. open': 'open',
+            '2. high': 'high', 
+            '3. low': 'low',
+            '4. close': 'close',
+            '5. volume': 'volume'
+        }
+        
+        # Only rename columns that exist
+        existing_columns = {k: v for k, v in column_mapping.items() if k in df.columns}
+        df.rename(columns=existing_columns, inplace=True)
         
         # Ensure date column is datetime
         if 'date' in df.columns:
@@ -64,7 +102,7 @@ def fetch_ohlc(symbol, interval='1d', period='6mo'):
         logger.error(f"Error fetching data for {symbol}: {e}")
         return None
 
-def fetch_ohlc_with_db_cache(symbol, interval='1d', period='6mo', force_fetch=False):
+def fetch_ohlc_with_db_cache(symbol, interval='daily', period='6mo', force_fetch=False):
     """
     Fetch OHLC data with database caching.
     First checks if data exists in DB and is fresh, otherwise fetches from API.
@@ -78,26 +116,26 @@ def fetch_ohlc_with_db_cache(symbol, interval='1d', period='6mo', force_fetch=Fa
     Returns:
         pandas DataFrame or None: OHLCV data
     """
-    logger = get_logger(__name__, log_file_prefix="yfinance_fetcher")
+    logger = get_logger(__name__, log_file_prefix="alpha_vantage_fetcher")
     
     try:
         # Check if we should use cached data
         if not force_fetch:
             # Check if data exists and is fresh in DB
-            if check_data_freshness(symbol, 'yfinance', days_threshold=1):
+            if check_data_freshness(symbol, 'alpha_vantage', days_threshold=1):
                 logger.info(f"Using cached data for {symbol} from database")
-                df = load_ohlcv_data(symbol, 'yfinance')
+                df = load_ohlcv_data(symbol, 'alpha_vantage')
                 if df is not None and not df.empty:
                     return df
         
         # Fetch fresh data from API
-        logger.info(f"Fetching fresh data for {symbol} from yfinance API")
+        logger.info(f"Fetching fresh data for {symbol} from Alpha Vantage API")
         df = fetch_ohlc(symbol, interval, period)
         
         if df is not None and not df.empty:
             # Store in database
             logger.info(f"Storing {len(df)} records for {symbol} in database")
-            store_ohlcv_data(df, 'yfinance', symbol)
+            store_ohlcv_data(df, 'alpha_vantage', symbol)
         
         return df
         
@@ -105,7 +143,7 @@ def fetch_ohlc_with_db_cache(symbol, interval='1d', period='6mo', force_fetch=Fa
         logger.error(f"Error in fetch_ohlc_with_db_cache for {symbol}: {e}")
         return None
 
-def fetch_ohlc_enhanced(symbol, interval='1d', period='6mo', validate_data=True):
+def fetch_ohlc_enhanced(symbol, interval='daily', period='6mo', validate_data=True):
     """
     Enhanced version of fetch_ohlc with data validation and quality checks.
     
@@ -118,7 +156,7 @@ def fetch_ohlc_enhanced(symbol, interval='1d', period='6mo', validate_data=True)
     Returns:
         pandas DataFrame or None: OHLCV data
     """
-    logger = get_logger(__name__, log_file_prefix="yfinance_fetcher")
+    logger = get_logger(__name__, log_file_prefix="alpha_vantage_fetcher")
     
     try:
         # Use DB cache version
@@ -150,7 +188,7 @@ def _validate_ohlc_data(df: pd.DataFrame, symbol: str) -> bool:
     Returns:
         bool: True if data is valid
     """
-    logger = get_logger(__name__, log_file_prefix="yfinance_fetcher")
+    logger = get_logger(__name__, log_file_prefix="alpha_vantage_fetcher")
     
     try:
         # Check minimum data points
@@ -205,7 +243,7 @@ def _validate_ohlc_data(df: pd.DataFrame, symbol: str) -> bool:
 
 def get_stock_info(symbol: str) -> Optional[Dict[str, Any]]:
     """
-    Get comprehensive stock information
+    Get comprehensive stock information from Alpha Vantage
     
     Args:
         symbol: Stock symbol
@@ -213,34 +251,35 @@ def get_stock_info(symbol: str) -> Optional[Dict[str, Any]]:
     Returns:
         Dict or None: Stock information
     """
-    logger = get_logger(__name__, log_file_prefix="yfinance_fetcher")
+    logger = get_logger(__name__, log_file_prefix="alpha_vantage_fetcher")
     
     try:
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
+        client = get_alpha_vantage_client()
+        if not client:
+            return None
         
-        if not info or len(info) < 5:  # Basic check for valid info
-            logger.warning(f"No valid info returned for {symbol}")
+        # Get company overview
+        overview, _ = client.get_company_overview(symbol)
+        
+        if not overview:
+            logger.warning(f"No company overview available for {symbol}")
             return None
         
         # Extract key information
         stock_info = {
             'symbol': symbol,
-            'name': info.get('longName', info.get('shortName', symbol)),
-            'sector': info.get('sector'),
-            'industry': info.get('industry'),
-            'market_cap': info.get('marketCap'),
-            'current_price': info.get('currentPrice', info.get('regularMarketPrice')),
-            'pe_ratio': info.get('trailingPE'),
-            'pb_ratio': info.get('priceToBook'),
-            'dividend_yield': info.get('dividendYield'),
-            'volume': info.get('volume'),
-            'avg_volume': info.get('averageVolume'),
-            'fifty_two_week_high': info.get('fiftyTwoWeekHigh'),
-            'fifty_two_week_low': info.get('fiftyTwoWeekLow'),
-            'currency': info.get('currency'),
-            'exchange': info.get('exchange'),
-            'country': info.get('country'),
+            'name': overview.get('Name', symbol),
+            'sector': overview.get('Sector'),
+            'industry': overview.get('Industry'),
+            'market_cap': overview.get('MarketCapitalization'),
+            'current_price': overview.get('LatestPrice'),
+            'pe_ratio': overview.get('PERatio'),
+            'pb_ratio': overview.get('PriceToBookRatio'),
+            'dividend_yield': overview.get('DividendYield'),
+            'volume': overview.get('Volume'),
+            'currency': overview.get('Currency'),
+            'exchange': overview.get('Exchange'),
+            'country': overview.get('Country'),
             'timestamp': datetime.now()
         }
         
@@ -253,7 +292,7 @@ def get_stock_info(symbol: str) -> Optional[Dict[str, Any]]:
 
 def get_real_time_price(symbol: str) -> Optional[Dict[str, Any]]:
     """
-    Get real-time price information
+    Get real-time price information from Alpha Vantage
     
     Args:
         symbol: Stock symbol
@@ -261,29 +300,31 @@ def get_real_time_price(symbol: str) -> Optional[Dict[str, Any]]:
     Returns:
         Dict or None: Real-time price data
     """
-    logger = get_logger(__name__, log_file_prefix="yfinance_fetcher")
+    logger = get_logger(__name__, log_file_prefix="alpha_vantage_fetcher")
     
     try:
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
+        client = get_alpha_vantage_client()
+        if not client:
+            return None
         
-        if 'regularMarketPrice' in info and info['regularMarketPrice']:
-            price_data = {
-                'symbol': symbol,
-                'price': info['regularMarketPrice'],
-                'change': info.get('regularMarketChange', 0),
-                'change_percent': info.get('regularMarketChangePercent', 0),
-                'volume': info.get('volume', 0),
-                'market_cap': info.get('marketCap'),
-                'pe_ratio': info.get('trailingPE'),
-                'timestamp': datetime.now()
-            }
-            
-            logger.debug(f"Retrieved real-time price for {symbol}: ${price_data['price']}")
-            return price_data
+        # Get real-time quote
+        quote, _ = client.get_quote_endpoint(symbol)
         
-        logger.warning(f"No real-time price available for {symbol}")
-        return None
+        if not quote:
+            logger.warning(f"No real-time quote available for {symbol}")
+            return None
+        
+        price_data = {
+            'symbol': symbol,
+            'price': float(quote['05. price']),
+            'change': float(quote['09. change']),
+            'change_percent': float(quote['10. change percent'].rstrip('%')),
+            'volume': int(quote['06. volume']),
+            'timestamp': datetime.now()
+        }
+        
+        logger.debug(f"Retrieved real-time price for {symbol}: ${price_data['price']}")
+        return price_data
         
     except Exception as e:
         logger.error(f"Error getting real-time price for {symbol}: {e}")

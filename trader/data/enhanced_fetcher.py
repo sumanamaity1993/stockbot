@@ -336,6 +336,13 @@ class EnhancedDataFetcher:
                 self.logger.warning(f"No data returned from Alpha Vantage for {symbol}")
                 return None
             
+            # Alpha Vantage returns data with date as index, need to reset it
+            if df.index.name is None or 'date' in str(df.index.name).lower():
+                df = df.reset_index()
+                # Rename the first column to 'date' if it's not already named
+                if len(df.columns) > 0 and df.columns[0] != 'date':
+                    df.rename(columns={df.columns[0]: 'date'}, inplace=True)
+            
             df = self._normalize_dataframe(df, 'alpha_vantage')
             return df
             
@@ -401,7 +408,8 @@ class EnhancedDataFetcher:
             return None
 
     def fetch_ohlc(self, symbol: str, interval: str = '1d', period: str = '6mo', 
-                   sources: Optional[List[str]] = None, use_cache: bool = True) -> Optional[pd.DataFrame]:
+                   sources: Optional[List[str]] = None, use_cache: bool = True, 
+                   save_to_db: bool = True) -> Optional[Dict[str, Any]]:
         """
         Fetch OHLC data from multiple sources with fallback
         
@@ -411,19 +419,21 @@ class EnhancedDataFetcher:
             period: Data period
             sources: List of data sources to try (in order)
             use_cache: Whether to use caching
+            save_to_db: Whether to save data to database
             
         Returns:
-            pd.DataFrame or None: OHLCV data
+            Dict with 'data' (DataFrame) and 'source' (str) or None
         """
         if sources is None:
-            sources = ['yfinance', 'alpha_vantage', 'polygon']
+            # Get sources from config, fallback to default
+            sources = self.config.get('DATA_SOURCES', ['yfinance', 'alpha_vantage', 'polygon'])
         
         # Check cache first
         if use_cache:
             cache_key = self._get_cache_key(symbol, interval, period, '_'.join(sources))
             cached_data = self._get_cached_data(cache_key)
             if cached_data is not None:
-                return cached_data
+                return {'data': cached_data, 'source': 'cache'}
         
         self.logger.info(f"Fetching data for {symbol} from sources: {sources}")
         
@@ -458,13 +468,17 @@ class EnhancedDataFetcher:
                 if df is not None and not df.empty:
                     # Validate data
                     if self._validate_data(df, symbol):
+                        # Save to individual source table if requested
+                        if save_to_db:
+                            self._save_to_source_db(symbol, df, source)
+                        
                         # Cache the data
                         if use_cache:
                             cache_key = self._get_cache_key(symbol, interval, period, '_'.join(sources))
                             self._cache_data(cache_key, df)
                         
                         self.logger.info(f"Successfully fetched data for {symbol} from {source}: {len(df)} rows")
-                        return df
+                        return {'data': df, 'source': source}
                     else:
                         self.logger.warning(f"Data validation failed for {symbol} from {source}")
                         
@@ -474,6 +488,53 @@ class EnhancedDataFetcher:
         
         self.logger.error(f"Failed to fetch data for {symbol} from all sources")
         return None
+
+    def _save_to_source_db(self, symbol: str, df: pd.DataFrame, source: str):
+        """
+        Save data to individual source table
+        
+        Args:
+            symbol: Stock symbol
+            df: DataFrame with OHLCV data
+            source: Data source used
+        """
+        try:
+            from postgres import store_ohlcv_data
+            
+            # Save to individual source table
+            store_ohlcv_data(df, source, symbol)
+            
+        except Exception as e:
+            self.logger.error(f"Error saving data to {source} database: {e}")
+
+    def load_from_source_db(self, symbol: str, source: str, days_fresh: int = 1) -> Optional[Dict[str, Any]]:
+        """
+        Load data from individual source database
+        
+        Args:
+            symbol: Stock symbol
+            source: Data source name
+            days_fresh: Consider data fresh for N days
+            
+        Returns:
+            Dict with 'data' (DataFrame) and 'source' (str) or None
+        """
+        try:
+            from postgres import load_ohlcv_data, check_data_freshness
+            
+            # Check if data is fresh
+            if check_data_freshness(symbol, source, days_fresh):
+                df = load_ohlcv_data(symbol, source)
+                if df is not None and not df.empty:
+                    self.logger.info(f"Loaded {len(df)} records for {symbol} from {source} DB")
+                    return {'data': df, 'source': source}
+            
+            self.logger.info(f"No fresh data found in {source} DB for {symbol}")
+            return None
+                
+        except Exception as e:
+            self.logger.error(f"Error loading from {source} database: {e}")
+            return None
 
     def get_real_time_price(self, symbol: str, source: str = 'yfinance') -> Optional[Dict[str, Any]]:
         """

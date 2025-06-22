@@ -10,14 +10,12 @@ This script demonstrates how to use the enhanced data fetcher with various featu
 - Error handling
 """
 
-import os
 import sys
-from datetime import datetime
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pandas as pd
-
-# Add the project root to the path
-sys.path.append(os.path.dirname(__file__))
-
+from datetime import datetime
 from trader.data.enhanced_fetcher import EnhancedDataFetcher
 from trader.data.data_quality import DataQualityAnalyzer
 from trader.data.config import ENHANCED_DATA_CONFIG

@@ -1,30 +1,38 @@
-# StockBot - Enhanced Trading Bot
+# StockBot - Advanced Trading Bot with Configurable Engines
 
-A comprehensive stock trading bot with rule-based strategies, SIP automation, and enhanced data fetching capabilities.
+A comprehensive stock trading bot featuring configurable rule-based engines, multi-source data fetching, SIP automation, and advanced data quality analysis.
 
-## 🚀 Features
+## 🚀 Key Features
 
-### Enhanced Data Fetching
+### 🔧 Configurable Trading Engines
+- **Classic Engine**: Single-source with intelligent fallback
+- **Multi-Source Engine**: All-source analysis with consensus signals
+- **Future-Ready**: Extensible architecture for ML engines
+- **Command-Line Control**: Easy engine switching and configuration
+
+### 📊 Enhanced Data Fetching System
 - **Multi-Source Integration**: yfinance, Alpha Vantage, Polygon.io
 - **Intelligent Fallback**: Automatic source switching on failures
+- **Database Caching**: Individual source tables for clean data separation
 - **Data Quality Assurance**: Comprehensive validation and cleaning
 - **Real-Time Data**: Live price fetching and market status
 - **Performance Optimization**: Intelligent caching and retry logic
 
-### Rule-Based Trading Strategies
+### 📈 Rule-Based Trading Strategies
 - **Simple Moving Average (SMA)**: Golden/Death cross detection
 - **Exponential Moving Average (EMA)**: Trend following
 - **RSI Strategy**: Overbought/Oversold signals
 - **MACD Strategy**: Momentum and trend analysis
 - **Multi-Strategy Portfolio**: Combined signal analysis
+- **Visual Signal Indicators**: Colored dots for easy signal identification
 
-### SIP (Systematic Investment Plan) Automation
+### 💰 SIP (Systematic Investment Plan) Automation
 - **Automated Orders**: Scheduled investment execution
 - **Multiple Platforms**: Kite Connect integration
 - **Risk Management**: Order validation and monitoring
 - **Portfolio Tracking**: Comprehensive order history
 
-### Data Quality & Analysis
+### 🔍 Data Quality & Analysis
 - **Quality Scoring**: Comprehensive data assessment
 - **Anomaly Detection**: Statistical outlier identification
 - **Performance Metrics**: Detailed analysis reports
@@ -58,44 +66,90 @@ ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
 POLYGON_API_KEY=your_polygon_api_key
 ```
 
-### 3. Enhanced Data Fetching Demo
+### 3. Run Trading Engines
+
+#### Classic Engine (Single Source with Fallback)
 ```bash
-python demo_enhanced_fetcher.py
+# Use default configuration
+python -m trader.rule_based --engine classic --symbols AAPL MSFT
+
+# Custom period and sources
+python -m trader.rule_based --engine classic --symbols AAPL --period 3mo --sources yfinance alpha_vantage
 ```
 
-### 4. Rule Based Signal Display Demo
+#### Multi-Source Engine (All Sources Analysis)
 ```bash
-python demo_rule_based_signals.py
+# Analyze all sources for consensus signals
+python -m trader.rule_based --engine multi_source --symbols AAPL MSFT GOOGL
+
+# Custom configuration
+python -m trader.rule_based --engine multi_source --symbols AAPL --period 6mo --force-fetch
 ```
 
-### 5. Rule-Based Trading
+### 4. Demo Scripts
 ```bash
-python -m trader.rule_based
+# Enhanced data fetcher demo
+python demos/demo_enhanced_fetcher.py
+
+# Configurable engine demo
+python demos/demo_configurable_engines.py
+
+# Rule-based signals demo
+python demos/demo_rule_based_signals.py
 ```
 
-### 6. SIP Automation
+### 5. SIP Automation
 ```bash
 python -m trader.sip
 ```
 
-## 🛠️ Enhanced Data Fetcher Usage
+## 🏗️ Architecture Overview
 
-### Basic Data Fetching
+### Engine Types
+
+#### Classic Engine (`engine.py`)
+- **Purpose**: Single-source analysis with intelligent fallback
+- **Data Flow**: Enhanced Fetcher → Priority-based source selection → Individual source table
+- **Use Case**: Fast analysis with reliable data source
+- **Database**: Stores in `ohlcv_[best_source]` table
+
+#### Multi-Source Engine (`multi_source_engine.py`)
+- **Purpose**: All-source analysis with consensus signals
+- **Data Flow**: Individual Fetchers → All sources → Consensus analysis
+- **Use Case**: Comprehensive analysis with signal comparison
+- **Database**: Stores in individual `ohlcv_[source]` tables
+
+### Database Structure
+```
+ohlcv_yfinance          # yfinance data
+ohlcv_alpha_vantage     # Alpha Vantage data
+ohlcv_polygon          # Polygon.io data
+sip_orders             # SIP order history
+```
+
+## 🛠️ Usage Examples
+
+### Enhanced Data Fetcher
 ```python
 from trader.data.enhanced_fetcher import EnhancedDataFetcher
-from trader.data.config import ENHANCED_DATA_CONFIG
 
-# Initialize fetcher
-fetcher = EnhancedDataFetcher(ENHANCED_DATA_CONFIG)
+# Initialize with configuration
+config = {
+    "DATA_SOURCES": ["yfinance", "alpha_vantage", "polygon"],
+    "CACHE_ENABLED": True,
+    "CACHE_DURATION": 300
+}
+fetcher = EnhancedDataFetcher(config)
 
-# Fetch historical data
-df = fetcher.fetch_ohlc('AAPL', period='6mo')
+# Fetch data with fallback
+result = fetcher.fetch_ohlc('AAPL', period='6mo')
+if result:
+    df = result['data']
+    source = result['source']
+    print(f"Data from {source}: {len(df)} rows")
 
 # Get real-time price
-real_time = fetcher.get_real_time_price('AAPL')
-
-# Check market status
-market_status = fetcher.get_market_status()
+price_data = fetcher.get_real_time_price('AAPL')
 ```
 
 ### Data Quality Analysis
@@ -106,83 +160,112 @@ analyzer = DataQualityAnalyzer()
 analysis = analyzer.analyze_data_quality(df, 'AAPL')
 
 print(f"Quality Score: {analysis['quality_score']:.2f}")
+print(f"Completeness: {analysis['completeness_score']:.2f}")
+print(f"Consistency: {analysis['consistency_score']:.2f}")
 print(f"Recommendations: {analysis['recommendations']}")
 ```
 
-### Multiple Data Sources
+### Multi-Source Analysis
 ```python
-# Use specific sources
-df = fetcher.fetch_ohlc('AAPL', sources=['yfinance', 'alpha_vantage'])
+from trader.rule_based.multi_source_engine import MultiSourceEngine
 
-# Check source availability
-from trader.data.config import check_data_source_availability
-availability = check_data_source_availability(ENHANCED_DATA_CONFIG)
+engine = MultiSourceEngine()
+signals = engine.run_analysis(['AAPL', 'MSFT'])
+
+# Access consensus signals
+for symbol, consensus in signals['consensus_signals'].items():
+    print(f"{symbol}: {consensus['action']} (confidence: {consensus['confidence']:.2f})")
 ```
 
-## 📈 Trading Strategies
+## 🔧 Configuration
 
-### Strategy Configuration
-Edit `trader/rule_based/config.py` to customize:
-- **Symbols**: List of stocks to analyze
-- **Strategies**: Enable/disable specific strategies
-- **Parameters**: Adjust strategy thresholds
-- **Data Sources**: Choose preferred data providers
+### Engine Configuration (`trader/rule_based/config.py`)
+```python
+ENGINE_CONFIG = {
+    "DATA_SOURCES": ["yfinance", "alpha_vantage", "polygon"],
+    "CACHE_ENABLED": True,
+    "FORCE_API_FETCH": False,
+    "DB_DUMP": True
+}
 
-### Available Strategies
-1. **SMA Strategy**: 20-day vs 50-day moving average crossover
-2. **EMA Strategy**: 12-day vs 26-day exponential moving average
-3. **RSI Strategy**: 14-period RSI with 30/70 thresholds
-4. **MACD Strategy**: 12/26/9 MACD signal line crossover
+STRATEGY_CONFIG = {
+    "USE_SMA": True,
+    "SMA_SHORT_WINDOW": 20,
+    "SMA_LONG_WINDOW": 50,
+    "USE_EMA": True,
+    "EMA_SHORT_WINDOW": 12,
+    "EMA_LONG_WINDOW": 26,
+    "USE_RSI": True,
+    "RSI_PERIOD": 14,
+    "RSI_OVERSOLD": 30,
+    "RSI_OVERBOUGHT": 70,
+    "USE_MACD": True,
+    "MACD_FAST": 12,
+    "MACD_SLOW": 26,
+    "MACD_SIGNAL": 9
+}
+```
 
-### Rule Based Signal Display
-The rule-based trading summary now includes visual indicators for easy signal identification:
+### Command-Line Options
+```bash
+# Engine selection
+--engine classic|multi_source
+
+# Symbols and periods
+--symbols AAPL MSFT GOOGL
+--period 1mo|3mo|6mo|1y
+
+# Data sources
+--sources yfinance alpha_vantage polygon
+
+# Database and caching
+--db-cache|--no-db-cache
+--force-fetch
+
+# Output and logging
+--verbose
+--quiet
+```
+
+## 📊 Signal Display
+
+### Visual Signal Indicators
+The trading summary includes colored indicators for easy signal identification:
 
 ```
 📈 AAPL: 🟢 BUY (MACDStrategy)
 📈 MSFT: 🔴 SELL (MACDStrategy)
 📈 GOOGL: 🔴 SELL (SimpleMovingAverageStrategy) | 🔴 SELL (ExponentialMovingAverageStrategy)
 
-Signal Summary:
-  🟢 Buy signals: 1
-  🔴 Sell signals: 3
-  📊 Total signals: 4
+🎯 CONSENSUS SIGNALS SUMMARY:
+   📈 AAPL: 🟢 BUY (confidence: 0.75, buy: 3, sell: 0)
+   📈 MSFT: 🔴 SELL (confidence: 0.60, buy: 1, sell: 2)
 ```
 
-**Rule Based Color Legend:**
+**Signal Legend:**
 - 🟢 **Green dot** = BUY signal
 - 🔴 **Red dot** = SELL signal
-- ⚪ **White dot** = Other signal types
+- ⚪ **White dot** = HOLD/Other signal types
 - 📈 **Chart icon** = Stock symbol
 
-## 🔧 Configuration
+## 🔍 Testing
 
-### Enhanced Data Fetcher Settings
-```python
-ENHANCED_DATA_CONFIG = {
-    "CACHE_ENABLED": True,
-    "CACHE_DURATION": 300,  # 5 minutes
-    "MAX_RETRIES": 3,
-    "MIN_DATA_POINTS": 10,
-    "DATA_SOURCES": ["yfinance", "alpha_vantage", "polygon"]
-}
+### Run All Tests
+```bash
+python tests/test_all_fetchers.py
+python tests/test_configurable_engine.py
+python tests/test_multi_source_db.py
 ```
 
-### Trading Strategy Settings
-```python
-STRATEGY_CONFIG = {
-    "USE_SMA": True,
-    "SMA_SHORT_WINDOW": 20,
-    "SMA_LONG_WINDOW": 50,
-    "USE_RSI": True,
-    "RSI_PERIOD": 14,
-    "RSI_OVERSOLD": 30,
-    "RSI_OVERBOUGHT": 70
-}
+### Individual Component Tests
+```bash
+python tests/test_alpha_vantage.py
+python tests/test_enhanced_fetcher.py
 ```
 
-## 📊 Performance & Quality
+## 📈 Performance Metrics
 
-### Data Quality Metrics
+### Data Quality
 - **Completeness**: 95%+ data coverage
 - **Consistency**: 90%+ OHLC validation
 - **Anomaly Detection**: <5% false positives
@@ -192,76 +275,44 @@ STRATEGY_CONFIG = {
 - **Signal Accuracy**: Configurable strategy parameters
 - **Risk Management**: Built-in validation and checks
 - **Portfolio Tracking**: Comprehensive order history
-- **Performance Monitoring**: Detailed analytics
+- **Multi-Source Consensus**: Improved signal reliability
 
-## 🔍 Testing
+## 🚀 Advanced Features
 
-### Run Enhanced Data Fetcher Tests
-```bash
-python trader/data/test_enhanced_fetcher.py
-```
+### Database Caching
+- **Individual Source Tables**: Clean data separation
+- **Freshness Checking**: Automatic data refresh
+- **Performance Optimization**: Reduced API calls
 
-### Run Trading Strategy Tests
-```bash
-python -m trader.rule_based
-```
+### Error Handling
+- **Retry Logic**: Exponential backoff
+- **Fallback System**: Automatic source switching
+- **Data Validation**: Comprehensive quality checks
 
-### Quality Analysis
-```bash
-python -c "
-from trader.data.enhanced_fetcher import EnhancedDataFetcher
-from trader.data.data_quality import DataQualityAnalyzer
-from trader.data.config import ENHANCED_DATA_CONFIG
-
-fetcher = EnhancedDataFetcher(ENHANCED_DATA_CONFIG)
-analyzer = DataQualityAnalyzer()
-
-df = fetcher.fetch_ohlc('AAPL', period='3mo')
-analysis = analyzer.analyze_data_quality(df, 'AAPL')
-print(f'Quality Score: {analysis[\"quality_score\"]:.2f}')
-"
-```
-
-## 🚀 Roadmap
-
-### Phase 1: Enhanced Data Fetching ✅
-- [x] Multi-source data integration
-- [x] Error handling and retry logic
-- [x] Data validation and quality checks
-- [x] Caching and performance optimization
-- [x] Real-time data capabilities
-
-### Phase 2: Advanced Trading Strategies
-- [ ] Machine learning integration
-- [ ] Advanced technical indicators
-- [ ] Portfolio optimization
-- [ ] Risk management systems
-
-### Phase 3: Production Deployment
-- [ ] Docker containerization
-- [ ] Kubernetes orchestration
-- [ ] Monitoring and alerting
-- [ ] High availability setup
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+### Extensibility
+- **Plugin Architecture**: Easy strategy addition
+- **Configurable Sources**: Dynamic data source management
+- **Engine Framework**: Support for future ML engines
 
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Add tests
+3. Add tests for new functionality
+4. Ensure all tests pass
 5. Submit a pull request
 
-## 📞 Support
+## 📄 License
 
-For questions and support:
-- Create an issue in the repository
-- Check the documentation
-- Review the test examples
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🆘 Support
+
+For issues and questions:
+1. Check the documentation
+2. Review existing issues
+3. Create a new issue with detailed information
 
 ---
 
-**Note**: This is a trading bot for educational purposes. Always do your own research and consider the risks involved in trading.
+**Built with ❤️ for algorithmic trading enthusiasts**

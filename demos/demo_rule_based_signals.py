@@ -3,12 +3,11 @@
 Demo script to showcase the colored signal display feature
 """
 
-import os
 import sys
-from datetime import datetime
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Add the project root to the path
-sys.path.append(os.path.dirname(__file__))
+from datetime import datetime
 
 from trader.rule_based.config import RULE_BASED_CONFIG
 from trader.rule_based.engine import RuleBasedEngine
