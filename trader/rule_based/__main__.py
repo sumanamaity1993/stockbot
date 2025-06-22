@@ -76,18 +76,46 @@ def run_engine(engine, engine_type: str):
                 consensus = engine.get_consensus_signals(results)
                 if consensus:
                     logger.info("\n🎯 CONSENSUS SIGNALS SUMMARY:")
+                    
+                    # Separate actionable signals from hold signals
+                    buy_signals = []
+                    sell_signals = []
+                    hold_signals = []
+                    
                     for symbol, data in consensus.items():
                         signal = data['signal']
                         confidence = data['confidence']
                         buy_count = data['buy_count']
                         sell_count = data['sell_count']
                         
+                        signal_info = f"   📈 {symbol}: (confidence: {confidence:.2f}, buy: {buy_count}, sell: {sell_count})"
+                        
                         if signal == 'buy':
-                            logger.info(f"   📈 {symbol}: 🟢 BUY (confidence: {confidence:.2f}, buy: {buy_count}, sell: {sell_count})")
+                            buy_signals.append(f"🟢 BUY {signal_info}")
                         elif signal == 'sell':
-                            logger.info(f"   📈 {symbol}: 🔴 SELL (confidence: {confidence:.2f}, buy: {buy_count}, sell: {sell_count})")
+                            sell_signals.append(f"🔴 SELL {signal_info}")
                         else:
-                            logger.info(f"   📈 {symbol}: ⏸️  HOLD (confidence: {confidence:.2f}, buy: {buy_count}, sell: {sell_count})")
+                            hold_signals.append(f"⏸️  HOLD {signal_info}")
+                    
+                    # Show actionable signals first
+                    if buy_signals:
+                        logger.info("🟢 BUY SIGNALS:")
+                        for signal in buy_signals:
+                            logger.info(signal)
+                    
+                    if sell_signals:
+                        logger.info("🔴 SELL SIGNALS:")
+                        for signal in sell_signals:
+                            logger.info(signal)
+                    
+                    # Show hold signals separately
+                    if hold_signals:
+                        logger.info("⏸️  HOLD SIGNALS:")
+                        for signal in hold_signals:
+                            logger.info(signal)
+                    
+                    # Summary counts
+                    logger.info(f"\n📊 SUMMARY: {len(buy_signals)} BUY | {len(sell_signals)} SELL | {len(hold_signals)} HOLD")
             
         elif engine_type == "ml_enhanced":
             # Future ML engine execution

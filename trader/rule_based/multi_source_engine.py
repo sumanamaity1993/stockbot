@@ -56,7 +56,7 @@ class MultiSourceRuleBasedEngine:
         self.strategies = config.get("STRATEGIES", [])
         self.strategy_instances = self._initialize_strategies()
         
-        self.logger.info(f"Initialized with {len(self.strategies)} strategies: {[s.__class__.__name__ for s in self.strategies]}")
+        self.logger.info(f"Initialized with {len(self.strategies)} strategies: {[s.__class__.__name__ for s in self.strategy_instances]}")
         
         # Initialize database tables
         self._init_database()
@@ -157,8 +157,19 @@ class MultiSourceRuleBasedEngine:
         """Run multi-source analysis and store results"""
         start_time = time.time()
         self.logger.info("🔄 Running Multi-Source Engine Analysis")
-        self.logger.info("🚀 STARTING MULTI-SOURCE RULE-BASED ANALYSIS")
+        self.logger.info("🚀 STARTING SMART MULTI-SOURCE RULE-BASED ANALYSIS")
         self.logger.info("=" * 60)
+        
+        # SMART: Use predictive prefetching before analysis
+        try:
+            self.logger.info("🧠 SMART: Running predictive prefetch for optimal performance")
+            prefetch_results = self.enhanced_fetcher.predict_and_prefetch_data(
+                self.symbols, prediction_hours=24
+            )
+            if prefetch_results.get('prefetched_symbols'):
+                self.logger.info(f"🧠 SMART: Prefetched {len(prefetch_results['prefetched_symbols'])} symbols")
+        except Exception as e:
+            self.logger.warning(f"⚠️ Predictive prefetch failed: {e}")
         
         all_results = {}
         successful_symbols = 0
@@ -168,21 +179,38 @@ class MultiSourceRuleBasedEngine:
         sell_signals = 0
         hold_signals = 0
         
+        # SMART: Use source-specific concurrency for processing
+        source_priorities = {}
+        for source in self.sources:
+            concurrency_config = self.enhanced_fetcher.get_optimal_concurrency(source)
+            source_priorities[source] = concurrency_config['priority']
+        
+        sorted_sources = sorted(self.sources, key=lambda s: source_priorities[s])
+        self.logger.info(f"🎯 SMART: Processing sources by priority: {sorted_sources}")
+        
         for symbol in self.symbols:
             symbol_start_time = time.time()
             self.logger.info(f"\n📈 Processing {symbol}...")
             
-            # Get data from all sources
+            # Get data from all sources with smart concurrency
             sources_data = {}
             sources_analyzed = []
             data_quality_scores = {}
             signals_by_source = {}
             
-            for source in self.sources:
+            for source in sorted_sources:
                 df = self.get_data_for_source(symbol, source)
                 if df is not None and not df.empty:
                     sources_data[source] = df
                     sources_analyzed.append(source)
+                    
+                    # SMART: Compress and optimize data
+                    try:
+                        df_compressed = self.enhanced_fetcher.compress_and_optimize_data(df, symbol, source)
+                        df_clean = self.enhanced_fetcher.detect_and_remove_outliers(df_compressed, symbol, method="iqr")
+                        df = df_clean  # Use cleaned data
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ Data optimization failed for {symbol} from {source}: {e}")
                     
                     # Get data quality score
                     quality = self.data_analyzer.analyze_data_quality(df, symbol)
@@ -229,9 +257,9 @@ class MultiSourceRuleBasedEngine:
                     sell_count=consensus_data.get('sell_count', 0),
                     total_sources=consensus_data.get('total_sources', 0),
                     signals_by_source=signals_by_source,
-                    strategies=[s.__class__.__name__ for s in self.strategies],
+                    strategies=[s.__class__.__name__ for s in self.strategy_instances],
                     data_quality_scores=data_quality_scores,
-                    analysis_summary=f"Multi-source analysis for {symbol}",
+                    analysis_summary=f"SMART Multi-source analysis for {symbol}",
                     execution_time_ms=symbol_execution_time,
                     cache_hit=self.db_dump
                 )
@@ -246,9 +274,13 @@ class MultiSourceRuleBasedEngine:
         # Calculate execution time
         execution_time_ms = int((time.time() - start_time) * 1000)
         
+        # SMART: Get adaptive statistics
+        adaptive_stats = self.enhanced_fetcher.get_adaptive_stats()
+        cache_stats = self.enhanced_fetcher.get_cache_analytics()
+        
         # Store overall analysis history
         store_trading_analysis_history(
-            engine_type="multi_source",
+            engine_type="smart_multi_source",
             symbols_processed=len(self.symbols),
             successful_symbols=successful_symbols,
             failed_symbols=failed_symbols,
@@ -260,26 +292,42 @@ class MultiSourceRuleBasedEngine:
             config_used={
                 "symbols": self.symbols,
                 "data_period": self.data_period,
-                "strategies": [s.__class__.__name__ for s in self.strategies],
-                "sources": self.sources,
-                "db_dump": self.db_dump
+                "strategies": [s.__class__.__name__ for s in self.strategy_instances],
+                "sources": sorted_sources,
+                "db_dump": self.db_dump,
+                "adaptive_stats": adaptive_stats,
+                "cache_stats": cache_stats
             }
         )
         
         # Generate summary
-        self._generate_multi_source_summary(all_results, successful_symbols, failed_symbols)
+        self._generate_smart_multi_source_summary(all_results, successful_symbols, failed_symbols, adaptive_stats)
         
         return all_results
     
-    def _generate_multi_source_summary(self, results: Dict, successful_symbols: int, failed_symbols: int):
-        """Generate comprehensive summary of multi-source analysis"""
-        self.logger.info("\n" + "=" * 60)
-        self.logger.info("MULTI-SOURCE RULE-BASED TRADING SUMMARY")
+    def _generate_smart_multi_source_summary(self, results: Dict, successful_symbols: int, failed_symbols: int, adaptive_stats: Dict):
+        """Generate comprehensive summary of smart multi-source analysis"""
+        self.logger.info("=" * 60)
+        self.logger.info("SMART MULTI-SOURCE RULE-BASED TRADING SUMMARY")
         self.logger.info("=" * 60)
         
         self.logger.info(f"Total symbols processed: {len(self.symbols)}")
         self.logger.info(f"✅ Successful: {successful_symbols}")
         self.logger.info(f"❌ Failed: {failed_symbols}")
+        
+        # SMART: Display adaptive statistics
+        if adaptive_stats:
+            self.logger.info("🧠 SMART ADAPTIVE STATISTICS:")
+            for source, stats in adaptive_stats.items():
+                success_rate = stats.get('success_rate', 0)
+                current_delay = stats.get('current_delay', 0)
+                total_calls = stats.get('total_calls', 0)
+                
+                if total_calls > 0:
+                    self.logger.info(f"   📊 {source.upper()}:")
+                    self.logger.info(f"      Success Rate: {success_rate:.1%}")
+                    self.logger.info(f"      Current Delay: {current_delay:.2f}s")
+                    self.logger.info(f"      Total Calls: {total_calls}")
         
         # Count signals by source
         source_signals = {}
@@ -297,7 +345,7 @@ class MultiSourceRuleBasedEngine:
         self.logger.info(f"Total signals generated: {total_signals}")
         
         if source_signals:
-            self.logger.info("\n📊 Signals by Data Source:")
+            self.logger.info("📊 Signals by Data Source:")
             for source_name, signals in source_signals.items():
                 buy_count = signals['buy']
                 sell_count = signals['sell']
@@ -317,7 +365,7 @@ class MultiSourceRuleBasedEngine:
                 symbols_with_signals.append(symbol)
         
         if symbols_with_signals:
-            self.logger.info(f"\n📈 Symbols with signals: {len(symbols_with_signals)}")
+            self.logger.info(f"📈 Symbols with signals: {len(symbols_with_signals)}")
             self.logger.info("Symbols with trading signals:")
             
             for symbol in symbols_with_signals:
@@ -335,6 +383,19 @@ class MultiSourceRuleBasedEngine:
                 
                 if signal_summary:
                     self.logger.info(f"   📈 {symbol}: {' | '.join(signal_summary)}")
+        
+        # SMART: Display cache analytics
+        try:
+            cache_stats = self.enhanced_fetcher.get_cache_analytics()
+            if cache_stats:
+                self.logger.info("🔥 SMART CACHE ANALYTICS:")
+                self.logger.info(f"   Total Cache Entries: {cache_stats.get('total_entries', 0)}")
+                self.logger.info(f"   Cache Memory Usage: {cache_stats.get('total_memory_mb', 0):.1f} MB")
+                self.logger.info(f"   Cache Duration: {cache_stats.get('cache_duration', 0)}s")
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error getting cache analytics: {e}")
+        
+        self.logger.info("✅ SMART Multi-Source Engine execution completed successfully")
     
     def get_consensus_signals(self, results: Dict) -> Dict[str, Dict[str, Any]]:
         """
@@ -387,17 +448,18 @@ class MultiSourceRuleBasedEngine:
 
     def get_data_for_source(self, symbol: str, source: str) -> Optional[pd.DataFrame]:
         """
-        Get data for a specific source with quality validation
+        Get data for a specific source with quality validation and fallback to older data
         """
         try:
             # Check DB first if enabled
             if self.db_dump:
+                # Try fresh data first (1 day threshold)
                 if check_data_freshness(symbol, source, days_threshold=1):
                     df = load_ohlcv_data(symbol, source)
                     if df is not None and not df.empty:
                         # Quality check for DB data
                         quality = self.data_analyzer.analyze_data_quality(df, symbol)
-                        self.logger.info(f"✅ {source}: {len(df)} data points for {symbol} (DB). Quality: {quality['quality_score']:.2f}")
+                        self.logger.info(f"✅ {source}: {len(df)} data points for {symbol} (DB - fresh). Quality: {quality['quality_score']:.2f}")
                         
                         # Skip if quality is very low
                         if quality['quality_score'] < 0.5:
@@ -405,39 +467,84 @@ class MultiSourceRuleBasedEngine:
                             return None
                         
                         return df
+                
+                # Fallback: Try older data (7 days threshold) if fresh data not available
+                if check_data_freshness(symbol, source, days_threshold=7):
+                    df = load_ohlcv_data(symbol, source)
+                    if df is not None and not df.empty:
+                        # Quality check for older DB data
+                        quality = self.data_analyzer.analyze_data_quality(df, symbol)
+                        self.logger.info(f"⚠️ {source}: {len(df)} data points for {symbol} (DB - older, 7 days). Quality: {quality['quality_score']:.2f}")
+                        
+                        # Skip if quality is very low
+                        if quality['quality_score'] < 0.5:
+                            self.logger.warning(f"❌ {source}: Very low quality older data for {symbol} from DB: {quality['quality_score']:.2f}")
+                            return None
+                        
+                        return df
             
-            # Fetch fresh data
-            self.logger.info(f"Fetching data for {symbol} from sources: {[source]}")
-            result = self.enhanced_fetcher.fetch_ohlc(
-                symbol, 
-                interval='1d', 
-                period=self.data_period,
-                sources=[source],
-                use_cache=True,
-                save_to_db=self.db_dump
-            )
-            
-            if result is not None:
-                df = result['data']
-                fetched_source = result['source']
+            # Try to fetch fresh data from API
+            try:
+                self.logger.info(f"Fetching data for {symbol} from sources: {[source]}")
                 
-                # Quality check for fresh data
-                quality = self.data_analyzer.analyze_data_quality(df, symbol)
-                self.logger.info(f"✅ {fetched_source}: {len(df)} data points for {symbol}. Quality: {quality['quality_score']:.2f}")
+                # Use incremental fetching to minimize API calls
+                result = self.enhanced_fetcher.fetch_ohlc_incremental(
+                    symbol, 
+                    interval='1d', 
+                    period=self.data_period,
+                    sources=[source],
+                    use_cache=True,
+                    save_to_db=self.db_dump
+                )
                 
-                # Log quality issues if any
-                if quality['quality_score'] < 0.7:
-                    self.logger.warning(f"⚠️ {fetched_source}: Low quality data for {symbol}: {quality['quality_score']:.2f}")
-                    if quality.get('recommendations'):
-                        for rec in quality['recommendations']:
-                            self.logger.warning(f"  - {rec}")
+                if result is not None:
+                    df = result['data']
+                    fetched_source = result['source']
+                    
+                    # Quality check for fresh data
+                    quality = self.data_analyzer.analyze_data_quality(df, symbol)
+                    self.logger.info(f"✅ {fetched_source}: {len(df)} data points for {symbol}. Quality: {quality['quality_score']:.2f}")
+                    
+                    # Log quality issues if any
+                    if quality['quality_score'] < 0.7:
+                        self.logger.warning(f"⚠️ {fetched_source}: Low quality data for {symbol}: {quality['quality_score']:.2f}")
+                        if quality.get('recommendations'):
+                            for rec in quality['recommendations']:
+                                self.logger.warning(f"  - {rec}")
+                    
+                    # Skip if quality is very low
+                    if quality['quality_score'] < 0.5:
+                        self.logger.error(f"❌ {fetched_source}: Very low quality data for {symbol}: {quality['quality_score']:.2f}. Skipping.")
+                        return None
+                    
+                    return df
+                    
+            except Exception as api_error:
+                # If API fails for any reason, try to use any available DB data as fallback
+                if self.db_dump:
+                    self.logger.warning(f"⚠️ {source}: API fetch failed for {symbol} ({str(api_error)[:100]}), trying DB fallback...")
+                    
+                    # Try even older data (30 days threshold) as last resort
+                    if check_data_freshness(symbol, source, days_threshold=30):
+                        df = load_ohlcv_data(symbol, source)
+                        if df is not None and not df.empty:
+                            quality = self.data_analyzer.analyze_data_quality(df, symbol)
+                            self.logger.info(f"🔄 {source}: {len(df)} data points for {symbol} (DB - older, 30 days, API fallback). Quality: {quality['quality_score']:.2f}")
+                            
+                            # Skip if quality is very low
+                            if quality['quality_score'] < 0.5:
+                                self.logger.warning(f"❌ {source}: Very low quality fallback data for {symbol}: {quality['quality_score']:.2f}")
+                                return None
+                            
+                            return df
+                    
+                    # If no data in DB at all, log the API error
+                    self.logger.error(f"❌ {source}: No data available for {symbol} (API failed, no DB fallback): {api_error}")
+                else:
+                    # If DB is not enabled, just log the API error
+                    self.logger.error(f"❌ {source}: API fetch failed for {symbol}: {api_error}")
                 
-                # Skip if quality is very low
-                if quality['quality_score'] < 0.5:
-                    self.logger.error(f"❌ {fetched_source}: Very low quality data for {symbol}: {quality['quality_score']:.2f}. Skipping.")
-                    return None
-                
-                return df
+                return None
             
             self.logger.warning(f"❌ {source}: No data for {symbol}")
             return None

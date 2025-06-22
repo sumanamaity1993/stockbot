@@ -17,7 +17,7 @@ ENHANCED_DATA_CONFIG = {
     "CACHE_DURATION": 300,  # 5 minutes in seconds
     
     # Retry Settings
-    "MAX_RETRIES": 3,
+    "MAX_RETRIES": 2,
     "RETRY_DELAY": 1,  # Base delay in seconds (exponential backoff)
     
     # Data Validation Settings
@@ -43,8 +43,40 @@ ENHANCED_DATA_CONFIG = {
     "LOG_TO_CONSOLE": True,
     
     # Performance Settings
-    "ENABLE_PARALLEL_FETCHING": False,  # Fetch multiple symbols in parallel
-    "MAX_CONCURRENT_REQUESTS": 5,       # Maximum concurrent API requests
+    "ENABLE_PARALLEL_FETCHING": True,  # Enable parallel processing
+    "MAX_CONCURRENT_REQUESTS": 5,      # Maximum concurrent API requests
+    
+    # SMART: Source-specific concurrency settings
+    "SOURCE_CONCURRENCY_LIMITS": {
+        "yfinance": {
+            "max_concurrent": 15,      # High concurrency (no rate limits)
+            "rate_limit_delay": 0.05,  # 50ms delay
+            "batch_size": 20,          # Large batches
+            "priority": 1              # Highest priority (free, reliable)
+        },
+        "alpha_vantage": {
+            "max_concurrent": 1,       # Very conservative (25 calls/day limit)
+            "rate_limit_delay": 1.0,   # 1 second delay
+            "batch_size": 5,           # Small batches
+            "priority": 3              # Lowest priority (strict limits)
+        },
+        "polygon": {
+            "max_concurrent": 3,       # Moderate concurrency (paid service)
+            "rate_limit_delay": 0.2,   # 200ms delay
+            "batch_size": 10,          # Medium batches
+            "priority": 2              # Medium priority (paid, quality)
+        }
+    },
+    
+    # SMART: Adaptive concurrency management
+    "ADAPTIVE_CONCURRENCY": {
+        "enabled": True,
+        "min_concurrent": 1,
+        "max_concurrent": 20,
+        "success_threshold": 0.9,      # Increase concurrency if success rate > 90%
+        "failure_threshold": 0.7,      # Decrease concurrency if success rate < 70%
+        "adjustment_factor": 1.2       # Multiply/divide by this factor
+    },
     
     # Market Hours (for real-time data)
     "MARKET_HOURS": {

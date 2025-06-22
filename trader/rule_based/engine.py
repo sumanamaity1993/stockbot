@@ -149,7 +149,18 @@ class RuleBasedEngine:
 
     def run(self):
         start_time = time.time()
-        self.logger.info(f"Running rule-based trading for symbols: {self.symbols} using enhanced data fetcher")
+        
+        # SMART: Use predictive prefetching before analysis
+        try:
+            self.logger.info("🧠 SMART: Running predictive prefetch for optimal performance")
+            prefetch_results = self.enhanced_fetcher.predict_and_prefetch_data(
+                self.symbols, prediction_hours=24
+            )
+            if prefetch_results.get('prefetched_symbols'):
+                self.logger.info(f"🧠 SMART: Prefetched {len(prefetch_results['prefetched_symbols'])} symbols")
+        except Exception as e:
+            self.logger.warning(f"⚠️ Predictive prefetch failed: {e}")
+        
         results = {}
         successful_symbols = 0
         failed_symbols = 0
@@ -166,6 +177,14 @@ class RuleBasedEngine:
             df = self.get_data(symbol)
             
             if df is not None and not df.empty:
+                # SMART: Compress and optimize data
+                try:
+                    df_compressed = self.enhanced_fetcher.compress_and_optimize_data(df, symbol, "enhanced_fetcher")
+                    df_clean = self.enhanced_fetcher.detect_and_remove_outliers(df_compressed, symbol, method="iqr")
+                    df = df_clean  # Use cleaned data
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Data optimization failed for {symbol}: {e}")
+                
                 signals = self.evaluate(df)
                 self.logger.info(f"{symbol} Signals: {signals}")
                 results[symbol] = signals
@@ -205,64 +224,115 @@ class RuleBasedEngine:
                     period=self.data_period,
                     signals=signals,
                     strategies=[s.__class__.__name__ for s in self.strategies],
-                    analysis_summary=f"Classic engine analysis for {symbol}",
+                    analysis_summary=f"SMART Classic engine analysis for {symbol}",
                     execution_time_ms=symbol_execution_time,
-                    cache_hit=self.db_dump  # Simplified cache hit detection
+                    cache_hit=self.db_dump
                 )
+                
             else:
                 failed_symbols += 1
+                self.logger.warning(f"No data available for {symbol}")
         
         # Calculate execution time
         execution_time_ms = int((time.time() - start_time) * 1000)
         
+        # SMART: Get adaptive statistics
+        adaptive_stats = self.enhanced_fetcher.get_adaptive_stats()
+        cache_stats = self.enhanced_fetcher.get_cache_analytics()
+        
         # Store overall analysis history
         store_trading_analysis_history(
-            engine_type="classic",
+            engine_type="smart_classic",
             symbols_processed=len(self.symbols),
             successful_symbols=successful_symbols,
             failed_symbols=failed_symbols,
             total_signals=total_signals,
             buy_signals=buy_signals,
             sell_signals=sell_signals,
-            hold_signals=0,  # Classic engine doesn't generate hold signals
+            hold_signals=len(self.symbols) - buy_signals - sell_signals,
             execution_time_ms=execution_time_ms,
             config_used={
                 "symbols": self.symbols,
                 "data_period": self.data_period,
                 "strategies": [s.__class__.__name__ for s in self.strategies],
-                "db_dump": self.db_dump
+                "data_source": "enhanced_fetcher",
+                "db_dump": self.db_dump,
+                "adaptive_stats": adaptive_stats,
+                "cache_stats": cache_stats
             }
         )
         
-        # Summary
+        # Generate summary
+        self._generate_smart_summary(results, successful_symbols, failed_symbols, adaptive_stats)
+        
+        return results
+
+    def _generate_smart_summary(self, results, successful_symbols, failed_symbols, adaptive_stats):
+        """Generate comprehensive summary of smart classic engine analysis"""
         self.logger.info("=" * 60)
-        self.logger.info("RULE-BASED TRADING SUMMARY")
+        self.logger.info("SMART CLASSIC RULE-BASED TRADING SUMMARY")
         self.logger.info("=" * 60)
+        
         self.logger.info(f"Total symbols processed: {len(self.symbols)}")
         self.logger.info(f"✅ Successful: {successful_symbols}")
         self.logger.info(f"❌ Failed: {failed_symbols}")
-        self.logger.info(f"Symbols with signals: {len(symbols_with_signals)}")
         
+        # Count signals
+        total_signals = 0
+        buy_signals = 0
+        sell_signals = 0
+        
+        for symbol, signals in results.items():
+            for signal_type, strategy_name in signals:
+                total_signals += 1
+                if signal_type == 'buy':
+                    buy_signals += 1
+                elif signal_type == 'sell':
+                    sell_signals += 1
+        
+        self.logger.info(f"Total signals generated: {total_signals}")
+        self.logger.info(f"🟢 BUY signals: {buy_signals}")
+        self.logger.info(f"🔴 SELL signals: {sell_signals}")
+        
+        # Show symbols with signals
+        symbols_with_signals = [symbol for symbol, signals in results.items() if signals]
         if symbols_with_signals:
+            self.logger.info(f"📈 Symbols with signals: {len(symbols_with_signals)}")
             self.logger.info("Symbols with trading signals:")
+            
             for symbol in symbols_with_signals:
                 signals = results[symbol]
                 signal_summary = []
+                
                 for signal_type, strategy_name in signals:
                     dot = "🟢" if signal_type == 'buy' else "🔴"
                     signal_summary.append(f"{dot} {signal_type.upper()} ({strategy_name})")
+                
                 self.logger.info(f"   📈 {symbol}: {' | '.join(signal_summary)}")
-        else:
-            self.logger.info("😴 No trading signals found in current market conditions")
-            self.logger.info("💡 Consider:")
-            self.logger.info("   • Using shorter moving average periods for more signals")
-            self.logger.info("   • Enabling additional strategies (EMA, RSI, MACD)")
-            self.logger.info("   • Checking different time periods")
         
-        # Cache statistics
-        cache_stats = self.enhanced_fetcher.get_cache_stats()
-        self.logger.info(f"Cache statistics: {cache_stats['cache_size']} entries, duration: {cache_stats['cache_duration']}s")
+        # SMART: Display adaptive statistics
+        if adaptive_stats:
+            self.logger.info("🧠 SMART ADAPTIVE STATISTICS:")
+            for source, stats in adaptive_stats.items():
+                success_rate = stats.get('success_rate', 0)
+                current_delay = stats.get('current_delay', 0)
+                total_calls = stats.get('total_calls', 0)
+                
+                if total_calls > 0:
+                    self.logger.info(f"   📊 {source.upper()}:")
+                    self.logger.info(f"      Success Rate: {success_rate:.1%}")
+                    self.logger.info(f"      Current Delay: {current_delay:.2f}s")
+                    self.logger.info(f"      Total Calls: {total_calls}")
         
-        self.logger.info(f"✅ Engine execution completed successfully")
+        # SMART: Display cache analytics
+        try:
+            cache_stats = self.enhanced_fetcher.get_cache_analytics()
+            if cache_stats:
+                self.logger.info("🔥 SMART CACHE ANALYTICS:")
+                self.logger.info(f"   Total Cache Entries: {cache_stats.get('total_entries', 0)}")
+                self.logger.info(f"   Cache Memory Usage: {cache_stats.get('total_memory_mb', 0):.1f} MB")
+                self.logger.info(f"   Cache Duration: {cache_stats.get('cache_duration', 0)}s")
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error getting cache analytics: {e}")
         
-        return results 
+        self.logger.info("✅ SMART Classic Engine execution completed successfully") 
