@@ -19,7 +19,7 @@ from datetime import datetime
 
 from trader.data.enhanced_fetcher import EnhancedDataFetcher
 from trader.data.data_quality import DataQualityAnalyzer
-from trader.data.config import ENHANCED_DATA_CONFIG, check_data_source_availability
+from trader.data.config import DATA_FETCHER_CONFIG, check_data_source_availability
 from trader.data import yfinance_fetcher
 from logger import get_logger
 
@@ -32,11 +32,11 @@ def test_enhanced_fetcher():
     logger.info("=" * 60)
     
     # Initialize enhanced fetcher
-    fetcher = EnhancedDataFetcher(ENHANCED_DATA_CONFIG)
+    fetcher = EnhancedDataFetcher(DATA_FETCHER_CONFIG)
     
     # Check data source availability
     logger.info("📊 Checking data source availability...")
-    availability = check_data_source_availability(ENHANCED_DATA_CONFIG)
+    availability = check_data_source_availability(DATA_FETCHER_CONFIG)
     for source, info in availability.items():
         status_emoji = "✅" if info['available'] else "❌"
         logger.info(f"{status_emoji} {source}: {info['status']}")
@@ -155,7 +155,7 @@ def test_data_quality_analysis():
     symbol = "AAPL"
     
     # Fetch data
-    fetcher = EnhancedDataFetcher(ENHANCED_DATA_CONFIG)
+    fetcher = EnhancedDataFetcher(DATA_FETCHER_CONFIG)
     df = fetcher.fetch_ohlc(symbol, period='3mo')
     
     if df is not None and not df.empty:
@@ -181,7 +181,7 @@ def test_error_handling():
     logger.info("🚨 ERROR HANDLING TEST")
     logger.info("=" * 60)
     
-    fetcher = EnhancedDataFetcher(ENHANCED_DATA_CONFIG)
+    fetcher = EnhancedDataFetcher(DATA_FETCHER_CONFIG)
     
     # Test with invalid symbols
     invalid_symbols = [

@@ -1,6 +1,5 @@
 import pandas as pd
 from trader.data.enhanced_fetcher import EnhancedDataFetcher
-from trader.data.config import ENHANCED_DATA_CONFIG
 from postgres import get_sqlalchemy_engine, init_trading_signals_tables, store_classic_engine_signals, store_trading_analysis_history
 from trader.rule_based.strategies.simple_moving_average import SimpleMovingAverageStrategy
 from trader.rule_based.strategies.exponential_moving_average import ExponentialMovingAverageStrategy

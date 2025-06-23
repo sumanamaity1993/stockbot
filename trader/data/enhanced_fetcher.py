@@ -45,8 +45,8 @@ class EnhancedDataFetcher:
         self.logger = get_logger(__name__, log_file_prefix="data_fetcher")
         
         # API Keys
-        self.alpha_vantage_key = os.getenv('ALPHA_VANTAGE_API_KEY') or self.config.get('ALPHA_VANTAGE_API_KEY')
-        self.polygon_api_key = os.getenv('POLYGON_API_KEY') or self.config.get('POLYGON_API_KEY')
+        self.alpha_vantage_key = os.getenv('ALPHA_VANTAGE_API_KEY')
+        self.polygon_api_key = os.getenv('POLYGON_API_KEY')
         
         # Initialize API clients
         self._init_api_clients()

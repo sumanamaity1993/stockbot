@@ -150,6 +150,12 @@ def main():
         help="Data period (default: 6mo)"
     )
     parser.add_argument(
+        "--sources",
+        nargs="+",
+        choices=["yfinance", "alpha_vantage", "polygon", "fyers"],
+        help="Data sources to use (overrides config)"
+    )
+    parser.add_argument(
         "--force-fetch",
         action="store_true",
         help="Force fetch from API even if DB has data"
@@ -170,6 +176,10 @@ def main():
     # Override data period if specified
     if args.period:
         config["DATA_PERIOD"] = args.period
+    
+    # Override data sources if specified
+    if args.sources:
+        config["ENGINE_CONFIG"]["DATA_SOURCES"] = args.sources
     
     # Override force fetch if specified
     if args.force_fetch:
@@ -195,6 +205,7 @@ def main():
     logger.info(f"🔧 Engine Type: {engine_type}")
     logger.info(f"📊 Symbols: {len(config['SYMBOLS'])}")
     logger.info(f"📈 Data Period: {config['DATA_PERIOD']}")
+    logger.info(f"🔗 Data Sources: {config['ENGINE_CONFIG'].get('DATA_SOURCES', [])}")
     logger.info(f"🗄️  DB Cache: {config['ENGINE_CONFIG'].get('ENABLE_DB_CACHE', True)}")
     logger.info(f"🔄 Force API Fetch: {config['ENGINE_CONFIG'].get('FORCE_API_FETCH', False)}")
     

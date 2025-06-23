@@ -22,7 +22,6 @@ from trader.rule_based.strategies.macd_strategy import MACDStrategy
 from postgres import init_multi_source_ohlcv_tables, load_ohlcv_data, check_data_freshness, init_trading_signals_tables, store_multi_source_engine_signals, store_trading_analysis_history
 from logger import get_logger
 from trader.data.enhanced_fetcher import EnhancedDataFetcher
-from trader.data.config import ENHANCED_DATA_CONFIG
 from trader.data.data_quality import DataQualityAnalyzer
 
 class MultiSourceRuleBasedEngine:

@@ -18,7 +18,7 @@ import pandas as pd
 from datetime import datetime
 from trader.data.enhanced_fetcher import EnhancedDataFetcher
 from trader.data.data_quality import DataQualityAnalyzer
-from trader.data.config import ENHANCED_DATA_CONFIG
+from trader.data.config import DATA_FETCHER_CONFIG
 from logger import get_logger
 
 def main():
@@ -30,7 +30,7 @@ def main():
     
     # Initialize enhanced fetcher
     print("📊 Initializing Enhanced Data Fetcher...")
-    fetcher = EnhancedDataFetcher(ENHANCED_DATA_CONFIG)
+    fetcher = EnhancedDataFetcher(DATA_FETCHER_CONFIG)
     
     # Initialize quality analyzer
     analyzer = DataQualityAnalyzer()

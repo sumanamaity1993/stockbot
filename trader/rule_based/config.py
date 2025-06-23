@@ -23,6 +23,56 @@ RULE_BASED_CONFIG = {
         "ML_CONFIDENCE_THRESHOLD": 0.7,  # Minimum confidence for ML signals
         "ML_FEATURE_SOURCES": ["technical", "sentiment", "fundamental"],  # Feature sources
     },
+    "DATA_SOURCE": "yfinance",  # Options: 'yfinance', 'kite'
+    "DB_DUMP": True,  # If True, dump fetched data to DB and reuse if available
+    "DATA_PERIOD": "6mo",  # Period for historical data (e.g., '6mo', '1y')
+    
+    # Strategy Configuration
+    "STRATEGIES": [
+        {
+            "name": "SimpleMovingAverageStrategy",
+            "params": {
+                "short_window": 20,
+                "long_window": 50
+            }
+        },
+        {
+            "name": "ExponentialMovingAverageStrategy", 
+            "params": {
+                "short_window": 12,
+                "long_window": 26
+            }
+        },
+        {
+            "name": "RSIStrategy",
+            "params": {
+                "period": 14,
+                "oversold": 30,
+                "overbought": 70
+            }
+        },
+        {
+            "name": "MACDStrategy",
+            "params": {
+                "fast_period": 12,
+                "slow_period": 26,
+                "signal_period": 9
+            }
+        }
+    ],
+    
+    # Logging
+    "LOG_LEVEL": "INFO",  # DEBUG, INFO, WARNING, ERROR
+    "LOG_TO_FILE": True,
+    "LOG_TO_CONSOLE": True,
+    
+    # Automation/Scheduling (for future use)
+    "RUN_FREQUENCY": "daily",  # Options: 'daily', 'intraday', 'weekly', etc.
+    "RUN_TIME": "16:00",       # Time of day to run (24h format, e.g., '16:00' for 4 PM)
+    
+    # Retry Settings
+    "MAX_RETRIES": 2,
+    "RETRY_DELAY": 1,  # Base delay in seconds (exponential backoff)
     
     "SYMBOLS": [
         # 🏆 MEGA CAP TECH (The Magnificent 7 + More)
@@ -219,54 +269,4 @@ RULE_BASED_CONFIG = {
         "NMDC.NS",         # NMDC Ltd
         "SAIL.NS",         # Steel Authority of India Ltd
     ],
-    "DATA_SOURCE": "yfinance",  # Options: 'yfinance', 'kite'
-    "DB_DUMP": True,  # If True, dump fetched data to DB and reuse if available
-    "DATA_PERIOD": "6mo",  # Period for historical data (e.g., '6mo', '1y')
-    
-    # Strategy Configuration
-    "STRATEGIES": [
-        {
-            "name": "SimpleMovingAverageStrategy",
-            "params": {
-                "short_window": 20,
-                "long_window": 50
-            }
-        },
-        {
-            "name": "ExponentialMovingAverageStrategy", 
-            "params": {
-                "short_window": 12,
-                "long_window": 26
-            }
-        },
-        {
-            "name": "RSIStrategy",
-            "params": {
-                "period": 14,
-                "oversold": 30,
-                "overbought": 70
-            }
-        },
-        {
-            "name": "MACDStrategy",
-            "params": {
-                "fast_period": 12,
-                "slow_period": 26,
-                "signal_period": 9
-            }
-        }
-    ],
-    
-    # Logging
-    "LOG_LEVEL": "INFO",  # DEBUG, INFO, WARNING, ERROR
-    "LOG_TO_FILE": True,
-    "LOG_TO_CONSOLE": True,
-    
-    # Automation/Scheduling (for future use)
-    "RUN_FREQUENCY": "daily",  # Options: 'daily', 'intraday', 'weekly', etc.
-    "RUN_TIME": "16:00",       # Time of day to run (24h format, e.g., '16:00' for 4 PM)
-    
-    # Retry Settings
-    "MAX_RETRIES": 2,
-    "RETRY_DELAY": 1,  # Base delay in seconds (exponential backoff)
-} 
+}

@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 sys.path.append(os.path.dirname(__file__))
 
 from trader.data.enhanced_fetcher import EnhancedDataFetcher
-from trader.data.config import ENHANCED_DATA_CONFIG
+from trader.data.config import DATA_FETCHER_CONFIG
 
 def test_alpha_vantage():
     """Test Alpha Vantage API key setup"""
@@ -35,7 +35,7 @@ def test_alpha_vantage():
     print(f"✅ API Key found: {api_key[:8]}...{api_key[-4:]}")
     
     # Update config with API key
-    config = ENHANCED_DATA_CONFIG.copy()
+    config = DATA_FETCHER_CONFIG.copy()
     config['ALPHA_VANTAGE_API_KEY'] = api_key
     
     # Initialize enhanced fetcher

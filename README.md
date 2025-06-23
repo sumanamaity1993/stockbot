@@ -1,6 +1,6 @@
 # StockBot - Advanced Trading Bot with Configurable Engines
 
-A comprehensive stock trading bot featuring configurable rule-based engines, multi-source data fetching, SIP automation, and advanced data quality analysis.
+A comprehensive stock trading bot featuring configurable rule-based engines, multi-source data fetching, news sentiment analysis, SIP automation, and advanced data quality analysis.
 
 ## 🚀 Key Features
 
@@ -11,12 +11,19 @@ A comprehensive stock trading bot featuring configurable rule-based engines, mul
 - **Command-Line Control**: Easy engine switching and configuration
 
 ### 📊 Enhanced Data Fetching System
-- **Multi-Source Integration**: yfinance, Alpha Vantage, Polygon.io
+- **Multi-Source Integration**: yfinance, Alpha Vantage, Polygon.io, Fyers API
 - **Intelligent Fallback**: Automatic source switching on failures
 - **Database Caching**: Individual source tables for clean data separation
 - **Data Quality Assurance**: Comprehensive validation and cleaning
 - **Real-Time Data**: Live price fetching and market status
 - **Performance Optimization**: Intelligent caching and retry logic
+
+### 📰 News & Sentiment Analysis
+- **Multi-Source News**: GNews API, NewsAPI, Reddit sentiment
+- **Sentiment Scoring**: VADER, FinBERT, and custom models
+- **Real-Time Monitoring**: Live news tracking for trading signals
+- **Database Storage**: Structured news articles and sentiment scores
+- **Trading Integration**: News sentiment as additional signal factor
 
 ### 📈 Rule-Based Trading Strategies
 - **Simple Moving Average (SMA)**: Golden/Death cross detection
@@ -37,6 +44,12 @@ A comprehensive stock trading bot featuring configurable rule-based engines, mul
 - **Anomaly Detection**: Statistical outlier identification
 - **Performance Metrics**: Detailed analysis reports
 - **Recommendations**: Actionable improvement suggestions
+
+### 🔐 Security & Configuration
+- **Environment Variables**: All sensitive credentials managed via .env
+- **Unified Configuration**: Centralized DATA_FETCHER_CONFIG for all data sources
+- **Secure API Management**: No hardcoded credentials in codebase
+- **Modular Architecture**: Clean separation of concerns
 
 ## 🧠 Smart Features & Optimizations
 
@@ -91,13 +104,23 @@ DB_PASSWORD=your_db_password
 DB_HOST=localhost
 DB_PORT=5432
 
+# Market Data APIs
+ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
+POLYGON_API_KEY=your_polygon_api_key
+FYERS_API_KEY=your_fyers_api_key
+FYERS_API_SECRET=your_fyers_api_secret
+FYERS_ACCESS_TOKEN=your_fyers_access_token
+
+# News & Sentiment APIs
+GNEWS_API_KEY=your_gnews_api_key
+NEWSAPI_KEY=your_newsapi_key
+REDDIT_CLIENT_ID=your_reddit_client_id
+REDDIT_CLIENT_SECRET=your_reddit_client_secret
+REDDIT_USER_AGENT=your_reddit_user_agent
+
 # Trading APIs (Optional)
 API_KEY=your_kite_api_key
 API_SECRET=your_kite_api_secret
-
-# Enhanced Data Sources (Optional)
-ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
-POLYGON_API_KEY=your_polygon_api_key
 ```
 
 ### 3. Run Trading Engines
@@ -155,9 +178,18 @@ python -m trader.sip
 
 ### Database Structure
 ```
+# Market Data Tables
 ohlcv_yfinance          # yfinance data
 ohlcv_alpha_vantage     # Alpha Vantage data
 ohlcv_polygon          # Polygon.io data
+ohlcv_fyers            # Fyers API data
+
+# News & Sentiment Tables
+news_articles           # News articles from all sources
+sentiment_scores        # Sentiment analysis results
+trading_signals         # Generated trading signals
+
+# Trading Tables
 sip_orders             # SIP order history
 ```
 
@@ -166,14 +198,10 @@ sip_orders             # SIP order history
 ### Enhanced Data Fetcher
 ```python
 from trader.data.enhanced_fetcher import EnhancedDataFetcher
+from trader.data.config import DATA_FETCHER_CONFIG
 
-# Initialize with configuration
-config = {
-    "DATA_SOURCES": ["yfinance", "alpha_vantage", "polygon"],
-    "CACHE_ENABLED": True,
-    "CACHE_DURATION": 300
-}
-fetcher = EnhancedDataFetcher(config)
+# Initialize with unified configuration
+fetcher = EnhancedDataFetcher(DATA_FETCHER_CONFIG)
 
 # Fetch data with fallback
 result = fetcher.fetch_ohlc('AAPL', period='6mo')
@@ -184,6 +212,21 @@ if result:
 
 # Get real-time price
 price_data = fetcher.get_real_time_price('AAPL')
+```
+
+### News Data Fetching
+```python
+from trader.data.news_data.gnews_fetcher import GNewsFetcher
+from trader.data.news_data.config import NEWS_DATA_CONFIG
+
+# Initialize news fetcher
+gnews_fetcher = GNewsFetcher(NEWS_DATA_CONFIG)
+
+# Fetch news articles
+articles = gnews_fetcher.fetch_articles('AAPL', max_results=10)
+for article in articles:
+    print(f"Title: {article['title']}")
+    print(f"Published: {article['published_at']}")
 ```
 
 ### Data Quality Analysis
@@ -213,30 +256,30 @@ for symbol, consensus in signals['consensus_signals'].items():
 
 ## 🔧 Configuration
 
-### Engine Configuration (`trader/rule_based/config.py`)
+### Data Fetcher Configuration (`trader/data/config.py`)
 ```python
-ENGINE_CONFIG = {
-    "DATA_SOURCES": ["yfinance", "alpha_vantage", "polygon"],
+DATA_FETCHER_CONFIG = {
+    "DATA_SOURCES": ["yfinance", "alpha_vantage", "polygon", "fyers"],
     "CACHE_ENABLED": True,
     "FORCE_API_FETCH": False,
-    "DB_DUMP": True
+    "DB_DUMP": True,
+    "CACHE_DURATION": 300,
+    "MAX_RETRIES": 2,
+    "RETRY_DELAY": 1,
+    # ... additional settings
 }
+```
 
-STRATEGY_CONFIG = {
-    "USE_SMA": True,
-    "SMA_SHORT_WINDOW": 20,
-    "SMA_LONG_WINDOW": 50,
-    "USE_EMA": True,
-    "EMA_SHORT_WINDOW": 12,
-    "EMA_LONG_WINDOW": 26,
-    "USE_RSI": True,
-    "RSI_PERIOD": 14,
-    "RSI_OVERSOLD": 30,
-    "RSI_OVERBOUGHT": 70,
-    "USE_MACD": True,
-    "MACD_FAST": 12,
-    "MACD_SLOW": 26,
-    "MACD_SIGNAL": 9
+### News Data Configuration (`trader/data/news_data/config.py`)
+```python
+NEWS_DATA_CONFIG = {
+    'GNEWS_API_KEY': os.getenv('GNEWS_API_KEY'),
+    'NEWSAPI_KEY': os.getenv('NEWSAPI_KEY'),
+    'REDDIT_CLIENT_ID': os.getenv('REDDIT_CLIENT_ID'),
+    'REDDIT_CLIENT_SECRET': os.getenv('REDDIT_CLIENT_SECRET'),
+    'REDDIT_USER_AGENT': os.getenv('REDDIT_USER_AGENT'),
+    'ENABLED_SOURCES': ['gnews', 'newsapi', 'reddit'],
+    'FETCH_INTERVAL_MINUTES': 30,
 }
 ```
 
@@ -250,7 +293,7 @@ STRATEGY_CONFIG = {
 --period 1mo|3mo|6mo|1y
 
 # Data sources
---sources yfinance alpha_vantage polygon
+--sources yfinance alpha_vantage polygon fyers
 
 # Database and caching
 --db-cache|--no-db-cache
@@ -327,6 +370,18 @@ python tests/test_enhanced_fetcher.py
 - **Plugin Architecture**: Easy strategy addition
 - **Configurable Sources**: Dynamic data source management
 - **Engine Framework**: Support for future ML engines
+
+## 🔐 Security Features
+
+### Environment Variable Management
+- **No Hardcoded Credentials**: All API keys stored in .env file
+- **Centralized Configuration**: Single source of truth for all settings
+- **Secure Defaults**: Sensitive data never committed to repository
+
+### API Key Management
+- **Individual Source Configs**: Separate configs for different data types
+- **Graceful Degradation**: System works with available APIs
+- **Access Control**: Environment-based credential loading
 
 ## 🤝 Contributing
 
