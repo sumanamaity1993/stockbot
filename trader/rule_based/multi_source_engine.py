@@ -14,15 +14,13 @@ import time
 # Add the project root to the path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from trader.data.source_data import YFinanceFetcher, AlphaVantageFetcher, PolygonFetcher
 from trader.rule_based.strategies.simple_moving_average import SimpleMovingAverageStrategy
 from trader.rule_based.strategies.exponential_moving_average import ExponentialMovingAverageStrategy
 from trader.rule_based.strategies.rsi_strategy import RSIStrategy
 from trader.rule_based.strategies.macd_strategy import MACDStrategy
 from postgres import init_multi_source_ohlcv_tables, load_ohlcv_data, check_data_freshness, init_trading_signals_tables, store_multi_source_engine_signals, store_trading_analysis_history
 from logger import get_logger
-from trader.data.source_data import EnhancedDataFetcher
-from trader.data.source_data import DataQualityAnalyzer
+from trader.data import get_source_manager
 
 class MultiSourceRuleBasedEngine:
     """
@@ -45,11 +43,8 @@ class MultiSourceRuleBasedEngine:
         # Get sources from config
         self.sources = config.get("ENGINE_CONFIG", {}).get("DATA_SOURCES", ['yfinance', 'alpha_vantage', 'polygon'])
         
-        # Initialize enhanced data fetcher
-        self.enhanced_fetcher = EnhancedDataFetcher(self.config.get("ENGINE_CONFIG", {}))
-        
-        # Initialize data quality analyzer
-        self.data_analyzer = DataQualityAnalyzer(self.config.get("ENGINE_CONFIG", {}))
+        # Initialize source manager (replaces enhanced fetcher and data analyzer)
+        self.source_manager = get_source_manager(self.config.get("ENGINE_CONFIG", {}))
         
         # Get strategy parameters from config
         self.strategies = config.get("STRATEGIES", [])
@@ -62,9 +57,9 @@ class MultiSourceRuleBasedEngine:
         init_trading_signals_tables()
         
     def _init_database(self):
-        """Initialize database table for enhanced fetcher data"""
+        """Initialize database table for source manager data"""
         try:
-            self.logger.info("Database table initialized for enhanced fetcher data")
+            self.logger.info("Database table initialized for source manager data")
         except Exception as e:
             self.logger.error(f"Error initializing database table: {e}")
         
@@ -89,7 +84,7 @@ class MultiSourceRuleBasedEngine:
     
     def fetch_data_from_all_sources(self, symbol: str, period: str = '6mo') -> Dict[str, Optional[pd.DataFrame]]:
         """
-        Fetch data for a symbol from all configured sources using enhanced fetcher
+        Fetch data for a symbol from all configured sources using source manager
         
         Args:
             symbol: Stock symbol
@@ -104,8 +99,8 @@ class MultiSourceRuleBasedEngine:
             try:
                 self.logger.debug(f"Fetching {symbol} from {source}")
                 
-                # Use enhanced fetcher to get data from this specific source
-                result = self.enhanced_fetcher.fetch_ohlc(
+                # Use source manager to get data from this specific source
+                result = self.source_manager.fetch_ohlc(
                     symbol, 
                     interval='1d', 
                     period=period,
@@ -162,7 +157,7 @@ class MultiSourceRuleBasedEngine:
         # SMART: Use predictive prefetching before analysis
         try:
             self.logger.info("🧠 SMART: Running predictive prefetch for optimal performance")
-            prefetch_results = self.enhanced_fetcher.predict_and_prefetch_data(
+            prefetch_results = self.source_manager.predict_and_prefetch_data(
                 self.symbols, prediction_hours=24
             )
             if prefetch_results.get('prefetched_symbols'):
@@ -181,7 +176,7 @@ class MultiSourceRuleBasedEngine:
         # SMART: Use source-specific concurrency for processing
         source_priorities = {}
         for source in self.sources:
-            concurrency_config = self.enhanced_fetcher.get_optimal_concurrency(source)
+            concurrency_config = self.source_manager.get_optimal_concurrency(source)
             source_priorities[source] = concurrency_config['priority']
         
         sorted_sources = sorted(self.sources, key=lambda s: source_priorities[s])
@@ -205,14 +200,14 @@ class MultiSourceRuleBasedEngine:
                     
                     # SMART: Compress and optimize data
                     try:
-                        df_compressed = self.enhanced_fetcher.compress_and_optimize_data(df, symbol, source)
-                        df_clean = self.enhanced_fetcher.detect_and_remove_outliers(df_compressed, symbol, method="iqr")
+                        df_compressed = self.source_manager.compress_and_optimize_data(df, symbol, source)
+                        df_clean = self.source_manager.detect_and_remove_outliers(df_compressed, symbol, method="iqr")
                         df = df_clean  # Use cleaned data
                     except Exception as e:
                         self.logger.warning(f"⚠️ Data optimization failed for {symbol} from {source}: {e}")
                     
                     # Get data quality score
-                    quality = self.data_analyzer.analyze_data_quality(df, symbol)
+                    quality = self.source_manager.analyze_data_quality(df, symbol)
                     data_quality_scores[source] = quality['quality_score']
                     
                     # Evaluate strategies
@@ -274,8 +269,8 @@ class MultiSourceRuleBasedEngine:
         execution_time_ms = int((time.time() - start_time) * 1000)
         
         # SMART: Get adaptive statistics
-        adaptive_stats = self.enhanced_fetcher.get_adaptive_stats()
-        cache_stats = self.enhanced_fetcher.get_cache_analytics()
+        adaptive_stats = self.source_manager.get_adaptive_stats()
+        cache_stats = self.source_manager.get_cache_analytics()
         
         # Store overall analysis history
         store_trading_analysis_history(
@@ -385,7 +380,7 @@ class MultiSourceRuleBasedEngine:
         
         # SMART: Display cache analytics
         try:
-            cache_stats = self.enhanced_fetcher.get_cache_analytics()
+            cache_stats = self.source_manager.get_cache_analytics()
             if cache_stats:
                 self.logger.info("🔥 SMART CACHE ANALYTICS:")
                 self.logger.info(f"   Total Cache Entries: {cache_stats.get('total_entries', 0)}")
@@ -457,7 +452,7 @@ class MultiSourceRuleBasedEngine:
                     df = load_ohlcv_data(symbol, source)
                     if df is not None and not df.empty:
                         # Quality check for DB data
-                        quality = self.data_analyzer.analyze_data_quality(df, symbol)
+                        quality = self.source_manager.analyze_data_quality(df, symbol)
                         self.logger.info(f"✅ {source}: {len(df)} data points for {symbol} (DB - fresh). Quality: {quality['quality_score']:.2f}")
                         
                         # Skip if quality is very low
@@ -472,7 +467,7 @@ class MultiSourceRuleBasedEngine:
                     df = load_ohlcv_data(symbol, source)
                     if df is not None and not df.empty:
                         # Quality check for older DB data
-                        quality = self.data_analyzer.analyze_data_quality(df, symbol)
+                        quality = self.source_manager.analyze_data_quality(df, symbol)
                         self.logger.info(f"⚠️ {source}: {len(df)} data points for {symbol} (DB - older, 7 days). Quality: {quality['quality_score']:.2f}")
                         
                         # Skip if quality is very low
@@ -487,7 +482,7 @@ class MultiSourceRuleBasedEngine:
                 self.logger.info(f"Fetching data for {symbol} from sources: {[source]}")
                 
                 # Use incremental fetching to minimize API calls
-                result = self.enhanced_fetcher.fetch_ohlc_incremental(
+                result = self.source_manager.fetch_ohlc_incremental(
                     symbol, 
                     interval='1d', 
                     period=self.data_period,
@@ -501,7 +496,7 @@ class MultiSourceRuleBasedEngine:
                     fetched_source = result['source']
                     
                     # Quality check for fresh data
-                    quality = self.data_analyzer.analyze_data_quality(df, symbol)
+                    quality = self.source_manager.analyze_data_quality(df, symbol)
                     self.logger.info(f"✅ {fetched_source}: {len(df)} data points for {symbol}. Quality: {quality['quality_score']:.2f}")
                     
                     # Log quality issues if any
@@ -527,7 +522,7 @@ class MultiSourceRuleBasedEngine:
                     if check_data_freshness(symbol, source, days_threshold=30):
                         df = load_ohlcv_data(symbol, source)
                         if df is not None and not df.empty:
-                            quality = self.data_analyzer.analyze_data_quality(df, symbol)
+                            quality = self.source_manager.analyze_data_quality(df, symbol)
                             self.logger.info(f"🔄 {source}: {len(df)} data points for {symbol} (DB - older, 30 days, API fallback). Quality: {quality['quality_score']:.2f}")
                             
                             # Skip if quality is very low

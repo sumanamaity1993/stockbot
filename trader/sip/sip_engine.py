@@ -9,6 +9,13 @@ from logger import get_logger
 import certifi
 from .config import DRY_RUN, LOG_LEVEL, LOG_TO_FILE, LOG_TO_CONSOLE
 
+# Add source manager import for fallback price fetching
+try:
+    from trader.data import get_source_manager
+    SOURCE_MANAGER_AVAILABLE = True
+except ImportError:
+    SOURCE_MANAGER_AVAILABLE = False
+
 class SIPEngine:
     def __init__(self):
         # Setup environment
@@ -19,6 +26,18 @@ class SIPEngine:
         self.API_SECRET = os.getenv("API_SECRET")
         self.ACCESS_FILE = "access_token.json"
         self.kite = KiteConnect(api_key=self.API_KEY)
+        
+        # Initialize source manager for fallback price fetching
+        if SOURCE_MANAGER_AVAILABLE:
+            try:
+                self.source_manager = get_source_manager()
+                self.logger.info("✅ Source manager initialized for fallback price fetching")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Could not initialize source manager: {e}")
+                self.source_manager = None
+        else:
+            self.source_manager = None
+            self.logger.info("ℹ️ Source manager not available for fallback price fetching")
 
     def is_market_open(self):
         now = datetime.now().time()
@@ -75,6 +94,44 @@ class SIPEngine:
         except Exception as e:
             self.logger.warning(f"⚠️ DB saving failed: {e}")
 
+    def get_ltp_with_fallback(self, symbol):
+        """
+        Get Last Traded Price with fallback to source manager if Kite Connect fails
+        
+        Args:
+            symbol: Stock symbol
+            
+        Returns:
+            float or None: Last traded price
+        """
+        ltp = None
+        source = "kite"
+        
+        # Try Kite Connect first
+        try:
+            ltp_data = self.kite.ltp(f"NSE:{symbol}")
+            ltp = ltp_data[f"NSE:{symbol}"]["last_price"]
+            self.logger.debug(f"✅ LTP from Kite Connect: {symbol} = ₹{ltp}")
+        except Exception as e:
+            self.logger.warning(f"⚠️ Could not fetch LTP from Kite Connect for {symbol}: {e}")
+            
+            # Fallback to source manager if available
+            if self.source_manager:
+                try:
+                    price_data = self.source_manager.get_real_time_price(symbol, source='alpha_vantage')
+                    if price_data and 'price' in price_data:
+                        ltp = price_data['price']
+                        source = "alpha_vantage"
+                        self.logger.info(f"✅ LTP from source manager ({source}): {symbol} = ₹{ltp}")
+                    else:
+                        self.logger.warning(f"⚠️ No price data available from source manager for {symbol}")
+                except Exception as fallback_error:
+                    self.logger.error(f"❌ Source manager fallback also failed for {symbol}: {fallback_error}")
+            else:
+                self.logger.warning(f"⚠️ No source manager available for fallback LTP for {symbol}")
+        
+        return ltp, source
+
     def place_sip(self, order):
         symbol = order["symbol"]
         order_type = order.get("type", "stock")
@@ -106,19 +163,19 @@ class SIPEngine:
                     self.logger.info(f"📊 ETF SIP: {symbol} x {quantity} units")
                 else:
                     self.logger.info(f"💹 {order_type.upper()} SIP: {symbol} x {quantity} units")
-                # Fetch LTP and calculate amount
-                ltp = None
-                try:
-                    ltp_data = self.kite.ltp(f"NSE:{symbol}")
-                    ltp = ltp_data[f"NSE:{symbol}"]["last_price"]
+                
+                # Fetch LTP with fallback and calculate amount
+                ltp, source = self.get_ltp_with_fallback(symbol)
+                if ltp:
                     amount = ltp * quantity
-                    self.logger.info(f"💹 LTP for {symbol}: ₹{ltp} | Total Amount: ₹{amount}")
-                except Exception as e:
-                    self.logger.warning(f"⚠️ Could not fetch LTP for {symbol}: {e}")
+                    self.logger.info(f"💹 LTP for {symbol} (from {source}): ₹{ltp} | Total Amount: ₹{amount}")
+                else:
+                    self.logger.warning(f"⚠️ Could not fetch LTP for {symbol} from any source")
                     amount = None
+                
                 if DRY_RUN:
                     self.logger.info(f"🎯 DRY RUN: Would place {order_mode} order for {symbol} x {quantity} units")
-                    self.save_sip_order(symbol, amount, quantity, order_type, platform, f"DRY_RUN: {order_mode} order simulated")
+                    self.save_sip_order(symbol, amount, quantity, order_type, platform, f"DRY RUN: {order_mode} order simulated")
                     return
                 order_response = self.kite.place_order(
                     variety=variety,

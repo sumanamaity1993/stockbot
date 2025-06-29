@@ -18,6 +18,12 @@ A comprehensive stock trading bot featuring configurable rule-based engines, mul
 - **Real-Time Data**: Live price fetching and market status
 - **Performance Optimization**: Intelligent caching and retry logic
 
+### 🧩 Unified Source Manager (NEW)
+- **Centralized Access**: All engines use a single Source Manager for data
+- **Unified API**: Consistent interface for all data operations
+- **Easy Extensibility**: Add new sources in one place
+- **Cleaner Engines**: Engines focus on strategy, not data plumbing
+
 ### 📰 News & Sentiment Analysis
 - **Multi-Source News**: GNews API, NewsAPI, Reddit sentiment
 - **Sentiment Scoring**: VADER, FinBERT, and custom models
@@ -162,96 +168,80 @@ python -m trader.sip
 
 ## 🏗️ Architecture Overview
 
-### Engine Types
+### Unified Data Access with Source Manager
 
-#### Classic Engine (`engine.py`)
-- **Purpose**: Single-source analysis with intelligent fallback
-- **Data Flow**: Enhanced Fetcher → Priority-based source selection → Individual source table
-- **Use Case**: Fast analysis with reliable data source
-- **Database**: Stores in `ohlcv_[best_source]` table
+All engines now use a single, centralized **Source Manager** for all data operations. This means:
+- No more direct use of `EnhancedDataFetcher` or `DataQualityAnalyzer` in engines
+- All data fetching, quality analysis, and optimization is done via the Source Manager
+- Consistent, maintainable, and extensible data access
 
-#### Multi-Source Engine (`multi_source_engine.py`)
-- **Purpose**: All-source analysis with consensus signals
-- **Data Flow**: Individual Fetchers → All sources → Consensus analysis
-- **Use Case**: Comprehensive analysis with signal comparison
-- **Database**: Stores in individual `ohlcv_[source]` tables
+**Example:**
+```python
+from trader.data import get_source_manager
 
-### Database Structure
+source_manager = get_source_manager()
+result = source_manager.fetch_ohlc('AAPL', interval='daily', period='6mo')
+if result:
+    df = result['data']
+    print(f"Fetched {len(df)} rows from {result['source']}")
+
+# Data quality analysis
+quality = source_manager.analyze_data_quality(df, 'AAPL')
+print(f"Quality score: {quality['quality_score']}")
 ```
-# Market Data Tables
-ohlcv_yfinance          # yfinance data
-ohlcv_alpha_vantage     # Alpha Vantage data
-ohlcv_polygon          # Polygon.io data
-ohlcv_fyers            # Fyers API data
 
-# News & Sentiment Tables
-news_articles           # News articles from all sources
-sentiment_scores        # Sentiment analysis results
-trading_signals         # Generated trading signals
+### Engine Example Usage
 
-# Trading Tables
-sip_orders             # SIP order history
+**Rule-Based Engine:**
+```python
+from trader.rule_based.engine import RuleBasedEngine
+
+config = {
+    "SYMBOLS": ["AAPL", "MSFT"],
+    "ENGINE_CONFIG": {"DATA_SOURCES": ["yfinance", "alpha_vantage"]},
+    # ... other config
+}
+engine = RuleBasedEngine(config)
+# All data operations use source_manager internally
+```
+
+**Multi-Source Engine:**
+```python
+from trader.rule_based.multi_source_engine import MultiSourceRuleBasedEngine
+
+config = {
+    "SYMBOLS": ["AAPL", "MSFT"],
+    "ENGINE_CONFIG": {"DATA_SOURCES": ["yfinance", "alpha_vantage", "polygon"]},
+    # ... other config
+}
+engine = MultiSourceRuleBasedEngine(config)
+# All data operations use source_manager internally
+```
+
+**SIP Engine (with fallback):**
+```python
+from trader.sip.sip_engine import SIPEngine
+sip_engine = SIPEngine()
+# SIP engine uses source_manager as fallback for real-time prices
 ```
 
 ## 🛠️ Usage Examples
 
-### Enhanced Data Fetcher
+**Fetching Data (Unified):**
 ```python
-from trader.data.source_data import EnhancedDataFetcher
-from trader.data.source_data import SOURCE_DATA_FETCHER_CONFIG
-
-# Initialize with unified configuration
-fetcher = EnhancedDataFetcher(SOURCE_DATA_FETCHER_CONFIG)
-
-# Fetch data with fallback
-result = fetcher.fetch_ohlc('AAPL', period='6mo')
-if result:
-    df = result['data']
-    source = result['source']
-    print(f"Data from {source}: {len(df)} rows")
-
-# Get real-time price
-price_data = fetcher.get_real_time_price('AAPL')
+from trader.data import get_source_manager
+source_manager = get_source_manager()
+result = source_manager.fetch_ohlc('AAPL', interval='daily', period='6mo')
 ```
 
-### News Data Fetching
+**Data Quality:**
 ```python
-from trader.data.news_data.gnews_fetcher import GNewsFetcher
-from trader.data.news_data.config import NEWS_DATA_CONFIG
-
-# Initialize news fetcher
-gnews_fetcher = GNewsFetcher(NEWS_DATA_CONFIG)
-
-# Fetch news articles
-articles = gnews_fetcher.fetch_articles('AAPL', max_results=10)
-for article in articles:
-    print(f"Title: {article['title']}")
-    print(f"Published: {article['published_at']}")
+quality = source_manager.analyze_data_quality(df, 'AAPL')
 ```
 
-### Data Quality Analysis
+**Real-Time Price:**
 ```python
-from trader.data.source_data import DataQualityAnalyzer
-
-analyzer = DataQualityAnalyzer()
-analysis = analyzer.analyze_data_quality(df, 'AAPL')
-
-print(f"Quality Score: {analysis['quality_score']:.2f}")
-print(f"Completeness: {analysis['completeness_score']:.2f}")
-print(f"Consistency: {analysis['consistency_score']:.2f}")
-print(f"Recommendations: {analysis['recommendations']}")
-```
-
-### Multi-Source Analysis
-```python
-from trader.rule_based.multi_source_engine import MultiSourceEngine
-
-engine = MultiSourceEngine()
-signals = engine.run_analysis(['AAPL', 'MSFT'])
-
-# Access consensus signals
-for symbol, consensus in signals['consensus_signals'].items():
-    print(f"{symbol}: {consensus['action']} (confidence: {consensus['confidence']:.2f})")
+price_data = source_manager.get_real_time_price('AAPL')
 ```
 
 ## 🔧 Configuration
@@ -329,59 +319,9 @@ The trading summary includes colored indicators for easy signal identification:
 
 ### Run All Tests
 ```bash
-python tests/test_all_fetchers.py
-python tests/test_configurable_engine.py
-python tests/test_multi_source_db.py
+python -m pytest tests/test_engine_source_manager_integration.py -v
+python -m pytest tests/test_source_manager.py -v
 ```
-
-### Individual Component Tests
-```bash
-python tests/test_alpha_vantage.py
-python tests/test_enhanced_fetcher.py
-```
-
-## 📈 Performance Metrics
-
-### Data Quality
-- **Completeness**: 95%+ data coverage
-- **Consistency**: 90%+ OHLC validation
-- **Anomaly Detection**: <5% false positives
-- **Cache Performance**: 10x speed improvement
-
-### Trading Performance
-- **Signal Accuracy**: Configurable strategy parameters
-- **Risk Management**: Built-in validation and checks
-- **Portfolio Tracking**: Comprehensive order history
-- **Multi-Source Consensus**: Improved signal reliability
-
-## 🚀 Advanced Features
-
-### Database Caching
-- **Individual Source Tables**: Clean data separation
-- **Freshness Checking**: Automatic data refresh
-- **Performance Optimization**: Reduced API calls
-
-### Error Handling
-- **Retry Logic**: Exponential backoff
-- **Fallback System**: Automatic source switching
-- **Data Validation**: Comprehensive quality checks
-
-### Extensibility
-- **Plugin Architecture**: Easy strategy addition
-- **Configurable Sources**: Dynamic data source management
-- **Engine Framework**: Support for future ML engines
-
-## 🔐 Security Features
-
-### Environment Variable Management
-- **No Hardcoded Credentials**: All API keys stored in .env file
-- **Centralized Configuration**: Single source of truth for all settings
-- **Secure Defaults**: Sensitive data never committed to repository
-
-### API Key Management
-- **Individual Source Configs**: Separate configs for different data types
-- **Graceful Degradation**: System works with available APIs
-- **Access Control**: Environment-based credential loading
 
 ## 🤝 Contributing
 

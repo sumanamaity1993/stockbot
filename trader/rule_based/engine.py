@@ -1,11 +1,10 @@
 import pandas as pd
-from trader.data.source_data import EnhancedDataFetcher
+from trader.data import get_source_manager
 from postgres import get_sqlalchemy_engine, init_trading_signals_tables, store_classic_engine_signals, store_trading_analysis_history
 from trader.rule_based.strategies.simple_moving_average import SimpleMovingAverageStrategy
 from trader.rule_based.strategies.exponential_moving_average import ExponentialMovingAverageStrategy
 from trader.rule_based.strategies.rsi_strategy import RSIStrategy
 from trader.rule_based.strategies.macd_strategy import MACDStrategy
-from trader.data.source_data import DataQualityAnalyzer
 from logger import get_logger
 import time
 
@@ -24,11 +23,8 @@ class RuleBasedEngine:
             log_file_prefix="rule_based_classic_engine"
         )
         
-        # Initialize enhanced data fetcher
-        self.enhanced_fetcher = EnhancedDataFetcher(self.config.get("ENGINE_CONFIG", {}))
-        
-        # Initialize data quality analyzer
-        self.data_analyzer = DataQualityAnalyzer(self.config.get("ENGINE_CONFIG", {}))
+        # Initialize source manager (replaces enhanced fetcher and data analyzer)
+        self.source_manager = get_source_manager(self.config.get("ENGINE_CONFIG", {}))
         
         # Get strategy parameters from config
         strategies_config = config.get("STRATEGIES", [])
@@ -75,9 +71,9 @@ class RuleBasedEngine:
 
     def get_data(self, symbol):
         """
-        Enhanced data fetching using only the enhanced fetcher with quality validation
+        Enhanced data fetching using source manager with quality validation
         """
-        self.logger.info(f"Fetching data for {symbol} using enhanced fetcher")
+        self.logger.info(f"Fetching data for {symbol} using source manager")
         
         try:
             # Get sources from config
@@ -86,7 +82,7 @@ class RuleBasedEngine:
             # First try to load from individual source databases
             if self.db_dump:
                 for source in sources:
-                    db_result = self.enhanced_fetcher.load_from_source_db(
+                    db_result = self.source_manager.load_from_source_db(
                         symbol, 
                         source,
                         days_fresh=1
@@ -97,7 +93,7 @@ class RuleBasedEngine:
                         source = db_result['source']
                         
                         # Quality check for DB data
-                        quality = self.data_analyzer.analyze_data_quality(df, symbol)
+                        quality = self.source_manager.analyze_data_quality(df, symbol)
                         self.logger.info(f"Loaded data from DB for {symbol} (source: {source}). Quality score: {quality['quality_score']:.2f}")
                         
                         # Skip if quality is very low
@@ -107,8 +103,8 @@ class RuleBasedEngine:
                         
                         return df
             
-            # Fetch fresh data using enhanced fetcher
-            result = self.enhanced_fetcher.fetch_ohlc(
+            # Fetch fresh data using source manager
+            result = self.source_manager.fetch_ohlc(
                 symbol, 
                 interval='1d', 
                 period=self.data_period,
@@ -122,7 +118,7 @@ class RuleBasedEngine:
                 source = result['source']
                 
                 # Quality check for fresh data
-                quality = self.data_analyzer.analyze_data_quality(df, symbol)
+                quality = self.source_manager.analyze_data_quality(df, symbol)
                 self.logger.info(f"Successfully fetched data for {symbol} from {source}: {len(df)} rows. Quality score: {quality['quality_score']:.2f}")
                 
                 # Log quality issues if any
@@ -139,11 +135,11 @@ class RuleBasedEngine:
                 
                 return df
             
-            self.logger.error(f"Failed to fetch data for {symbol} from enhanced fetcher")
+            self.logger.error(f"Failed to fetch data for {symbol} from source manager")
             return None
                 
         except Exception as e:
-            self.logger.error(f"Error in enhanced data fetching for {symbol}: {e}")
+            self.logger.error(f"Error in source manager data fetching for {symbol}: {e}")
             return None
 
     def run(self):
@@ -152,7 +148,7 @@ class RuleBasedEngine:
         # SMART: Use predictive prefetching before analysis
         try:
             self.logger.info("🧠 SMART: Running predictive prefetch for optimal performance")
-            prefetch_results = self.enhanced_fetcher.predict_and_prefetch_data(
+            prefetch_results = self.source_manager.predict_and_prefetch_data(
                 self.symbols, prediction_hours=24
             )
             if prefetch_results.get('prefetched_symbols'):
@@ -172,14 +168,14 @@ class RuleBasedEngine:
             symbol_start_time = time.time()
             self.logger.info(f"Processing {symbol}")
             
-            # Get data using enhanced fetcher (handles DB loading and saving)
+            # Get data using source manager (handles DB loading and saving)
             df = self.get_data(symbol)
             
             if df is not None and not df.empty:
                 # SMART: Compress and optimize data
                 try:
-                    df_compressed = self.enhanced_fetcher.compress_and_optimize_data(df, symbol, "enhanced_fetcher")
-                    df_clean = self.enhanced_fetcher.detect_and_remove_outliers(df_compressed, symbol, method="iqr")
+                    df_compressed = self.source_manager.compress_and_optimize_data(df, symbol, "source_manager")
+                    df_clean = self.source_manager.detect_and_remove_outliers(df_compressed, symbol, method="iqr")
                     df = df_clean  # Use cleaned data
                 except Exception as e:
                     self.logger.warning(f"⚠️ Data optimization failed for {symbol}: {e}")
@@ -202,11 +198,11 @@ class RuleBasedEngine:
                 
                 # Store individual symbol analysis
                 symbol_execution_time = int((time.time() - symbol_start_time) * 1000)
-                data_source = "enhanced_fetcher"  # Default source
+                data_source = "source_manager"  # Default source
                 data_quality_score = 0.0  # Will be updated if available
                 data_points = len(df)
                 
-                # Try to get data source and quality from enhanced fetcher
+                # Try to get data source and quality from source manager
                 try:
                     # This would need to be passed from get_data method
                     # For now, using defaults
@@ -236,8 +232,8 @@ class RuleBasedEngine:
         execution_time_ms = int((time.time() - start_time) * 1000)
         
         # SMART: Get adaptive statistics
-        adaptive_stats = self.enhanced_fetcher.get_adaptive_stats()
-        cache_stats = self.enhanced_fetcher.get_cache_analytics()
+        adaptive_stats = self.source_manager.get_adaptive_stats()
+        cache_stats = self.source_manager.get_cache_analytics()
         
         # Store overall analysis history
         store_trading_analysis_history(
@@ -254,7 +250,7 @@ class RuleBasedEngine:
                 "symbols": self.symbols,
                 "data_period": self.data_period,
                 "strategies": [s.__class__.__name__ for s in self.strategies],
-                "data_source": "enhanced_fetcher",
+                "data_source": "source_manager",
                 "db_dump": self.db_dump,
                 "adaptive_stats": adaptive_stats,
                 "cache_stats": cache_stats
@@ -325,7 +321,7 @@ class RuleBasedEngine:
         
         # SMART: Display cache analytics
         try:
-            cache_stats = self.enhanced_fetcher.get_cache_analytics()
+            cache_stats = self.source_manager.get_cache_analytics()
             if cache_stats:
                 self.logger.info("🔥 SMART CACHE ANALYTICS:")
                 self.logger.info(f"   Total Cache Entries: {cache_stats.get('total_entries', 0)}")
