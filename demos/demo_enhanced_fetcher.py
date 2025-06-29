@@ -16,9 +16,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
 from datetime import datetime
-from trader.data.enhanced_fetcher import EnhancedDataFetcher
-from trader.data.data_quality import DataQualityAnalyzer
-from trader.data.config import DATA_FETCHER_CONFIG
+from trader.data.source_data import EnhancedDataFetcher
+from trader.data.source_data import DataQualityAnalyzer
+from trader.data.source_data import SOURCE_DATA_FETCHER_CONFIG
 from logger import get_logger
 
 def main():
@@ -30,7 +30,7 @@ def main():
     
     # Initialize enhanced fetcher
     print("📊 Initializing Enhanced Data Fetcher...")
-    fetcher = EnhancedDataFetcher(DATA_FETCHER_CONFIG)
+    fetcher = EnhancedDataFetcher(SOURCE_DATA_FETCHER_CONFIG)
     
     # Initialize quality analyzer
     analyzer = DataQualityAnalyzer()

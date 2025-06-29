@@ -8,12 +8,12 @@ import sys
 from datetime import datetime
 
 # Add the project root to the path
-sys.path.append(os.path.dirname(__file__))
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from trader.rule_based.config import RULE_BASED_CONFIG
 from trader.rule_based.multi_source_engine import MultiSourceRuleBasedEngine
 from postgres import init_multi_source_ohlcv_tables, load_ohlcv_data, check_data_freshness
-from trader.data import yfinance_fetcher, alpha_vantage_fetcher, polygon_fetcher
+from trader.data.source_data import YFinanceFetcher, AlphaVantageFetcher, PolygonFetcher
 
 def test_database_setup():
     """Test database table creation and basic functionality"""
@@ -46,9 +46,9 @@ def test_individual_fetchers():
     period = "1mo"
     
     fetchers = [
-        ("yfinance", yfinance_fetcher),
-        ("alpha_vantage", alpha_vantage_fetcher),
-        ("polygon", polygon_fetcher)
+        ("yfinance", YFinanceFetcher()),
+        ("alpha_vantage", AlphaVantageFetcher()),
+        ("polygon", PolygonFetcher())
     ]
     
     results = {}

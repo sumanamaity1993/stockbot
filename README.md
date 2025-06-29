@@ -47,7 +47,7 @@ A comprehensive stock trading bot featuring configurable rule-based engines, mul
 
 ### 🔐 Security & Configuration
 - **Environment Variables**: All sensitive credentials managed via .env
-- **Unified Configuration**: Centralized DATA_FETCHER_CONFIG for all data sources
+- **Unified Configuration**: Centralized SOURCE_DATA_FETCHER_CONFIG for all data sources
 - **Secure API Management**: No hardcoded credentials in codebase
 - **Modular Architecture**: Clean separation of concerns
 
@@ -197,11 +197,11 @@ sip_orders             # SIP order history
 
 ### Enhanced Data Fetcher
 ```python
-from trader.data.enhanced_fetcher import EnhancedDataFetcher
-from trader.data.config import DATA_FETCHER_CONFIG
+from trader.data.source_data import EnhancedDataFetcher
+from trader.data.source_data import SOURCE_DATA_FETCHER_CONFIG
 
 # Initialize with unified configuration
-fetcher = EnhancedDataFetcher(DATA_FETCHER_CONFIG)
+fetcher = EnhancedDataFetcher(SOURCE_DATA_FETCHER_CONFIG)
 
 # Fetch data with fallback
 result = fetcher.fetch_ohlc('AAPL', period='6mo')
@@ -231,7 +231,7 @@ for article in articles:
 
 ### Data Quality Analysis
 ```python
-from trader.data.data_quality import DataQualityAnalyzer
+from trader.data.source_data import DataQualityAnalyzer
 
 analyzer = DataQualityAnalyzer()
 analysis = analyzer.analyze_data_quality(df, 'AAPL')
@@ -256,9 +256,9 @@ for symbol, consensus in signals['consensus_signals'].items():
 
 ## 🔧 Configuration
 
-### Data Fetcher Configuration (`trader/data/config.py`)
+### Data Fetcher Configuration (`trader/data/source_data/config.py`)
 ```python
-DATA_FETCHER_CONFIG = {
+SOURCE_DATA_FETCHER_CONFIG = {
     "DATA_SOURCES": ["yfinance", "alpha_vantage", "polygon", "fyers"],
     "CACHE_ENABLED": True,
     "FORCE_API_FETCH": False,

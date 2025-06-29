@@ -8,9 +8,9 @@ import sys
 from datetime import datetime
 
 # Add the project root to the path
-sys.path.append(os.path.dirname(__file__))
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from trader.data import yfinance_fetcher, alpha_vantage_fetcher, polygon_fetcher
+from trader.data.source_data import YFinanceFetcher, AlphaVantageFetcher, PolygonFetcher
 from logger import get_logger
 
 def test_individual_fetchers():
@@ -22,9 +22,9 @@ def test_individual_fetchers():
     period = "1mo"
     
     fetchers = [
-        ("yfinance", yfinance_fetcher),
-        ("alpha_vantage", alpha_vantage_fetcher),
-        ("polygon", polygon_fetcher)
+        ("yfinance", YFinanceFetcher()),
+        ("alpha_vantage", AlphaVantageFetcher()),
+        ("polygon", PolygonFetcher())
     ]
     
     results = {}

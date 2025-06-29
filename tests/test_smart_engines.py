@@ -17,8 +17,8 @@ sys.path.insert(0, str(project_root))
 
 from trader.rule_based.engine import RuleBasedEngine
 from trader.rule_based.multi_source_engine import MultiSourceRuleBasedEngine
-from trader.data.enhanced_fetcher import EnhancedDataFetcher
-from trader.data.data_quality import DataQualityAnalyzer
+from trader.data.source_data import EnhancedDataFetcher
+from trader.data.source_data import DataQualityAnalyzer
 
 # Configure logging
 logging.basicConfig(

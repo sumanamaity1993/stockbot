@@ -1,11 +1,11 @@
 import pandas as pd
-from trader.data.enhanced_fetcher import EnhancedDataFetcher
+from trader.data.source_data import EnhancedDataFetcher
 from postgres import get_sqlalchemy_engine, init_trading_signals_tables, store_classic_engine_signals, store_trading_analysis_history
 from trader.rule_based.strategies.simple_moving_average import SimpleMovingAverageStrategy
 from trader.rule_based.strategies.exponential_moving_average import ExponentialMovingAverageStrategy
 from trader.rule_based.strategies.rsi_strategy import RSIStrategy
 from trader.rule_based.strategies.macd_strategy import MACDStrategy
-from trader.data.data_quality import DataQualityAnalyzer
+from trader.data.source_data import DataQualityAnalyzer
 from logger import get_logger
 import time
 

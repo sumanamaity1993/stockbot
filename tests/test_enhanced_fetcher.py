@@ -12,15 +12,16 @@ This script demonstrates the enhanced data fetching capabilities including:
 
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import pandas as pd
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 
-from trader.data.enhanced_fetcher import EnhancedDataFetcher
-from trader.data.data_quality import DataQualityAnalyzer
-from trader.data.config import DATA_FETCHER_CONFIG, check_data_source_availability
-from trader.data import yfinance_fetcher
+from trader.data.source_data import YFinanceFetcher
+from trader.data.source_data import EnhancedDataFetcher
+from trader.data.source_data import DataQualityAnalyzer
+from trader.data.source_data import SOURCE_DATA_FETCHER_CONFIG, check_data_source_availability
 from logger import get_logger
 
 def test_enhanced_fetcher():
@@ -32,11 +33,11 @@ def test_enhanced_fetcher():
     logger.info("=" * 60)
     
     # Initialize enhanced fetcher
-    fetcher = EnhancedDataFetcher(DATA_FETCHER_CONFIG)
+    fetcher = EnhancedDataFetcher(SOURCE_DATA_FETCHER_CONFIG)
     
     # Check data source availability
     logger.info("📊 Checking data source availability...")
-    availability = check_data_source_availability(DATA_FETCHER_CONFIG)
+    availability = check_data_source_availability(SOURCE_DATA_FETCHER_CONFIG)
     for source, info in availability.items():
         status_emoji = "✅" if info['available'] else "❌"
         logger.info(f"{status_emoji} {source}: {info['status']}")
@@ -92,6 +93,7 @@ def test_enhanced_fetcher():
                 
                 # Test 4: Stock information (yfinance only)
                 logger.info("ℹ️  Fetching stock information...")
+                yfinance_fetcher = YFinanceFetcher()
                 stock_info = yfinance_fetcher.get_stock_info(symbol)
                 if stock_info:
                     logger.info(f"   Company: {stock_info['name']}")
@@ -155,7 +157,7 @@ def test_data_quality_analysis():
     symbol = "AAPL"
     
     # Fetch data
-    fetcher = EnhancedDataFetcher(DATA_FETCHER_CONFIG)
+    fetcher = EnhancedDataFetcher(SOURCE_DATA_FETCHER_CONFIG)
     df = fetcher.fetch_ohlc(symbol, period='3mo')
     
     if df is not None and not df.empty:
@@ -181,7 +183,7 @@ def test_error_handling():
     logger.info("🚨 ERROR HANDLING TEST")
     logger.info("=" * 60)
     
-    fetcher = EnhancedDataFetcher(DATA_FETCHER_CONFIG)
+    fetcher = EnhancedDataFetcher(SOURCE_DATA_FETCHER_CONFIG)
     
     # Test with invalid symbols
     invalid_symbols = [

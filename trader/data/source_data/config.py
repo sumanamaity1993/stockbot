@@ -1,10 +1,10 @@
-# Configuration for Data Fetcher (market data, API keys, caching, etc.)
+# Configuration for Source Data Fetcher (market data, API keys, caching, etc.)
 
 import os
 
-# DATA_FETCHER_CONFIG should only reference environment variables for sensitive data.
+# SOURCE_DATA_FETCHER_CONFIG should only reference environment variables for sensitive data.
 # Set your API keys and secrets in a .env file or as environment variables.
-DATA_FETCHER_CONFIG = {
+SOURCE_DATA_FETCHER_CONFIG = {
     # Data Sources
     "DATA_SOURCES": ["yfinance", "alpha_vantage", "polygon", "fyers"],
     "CACHE_ENABLED": True,

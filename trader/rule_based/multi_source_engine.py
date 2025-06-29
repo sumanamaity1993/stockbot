@@ -14,15 +14,15 @@ import time
 # Add the project root to the path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from trader.data import yfinance_fetcher, alpha_vantage_fetcher, polygon_fetcher
+from trader.data.source_data import YFinanceFetcher, AlphaVantageFetcher, PolygonFetcher
 from trader.rule_based.strategies.simple_moving_average import SimpleMovingAverageStrategy
 from trader.rule_based.strategies.exponential_moving_average import ExponentialMovingAverageStrategy
 from trader.rule_based.strategies.rsi_strategy import RSIStrategy
 from trader.rule_based.strategies.macd_strategy import MACDStrategy
 from postgres import init_multi_source_ohlcv_tables, load_ohlcv_data, check_data_freshness, init_trading_signals_tables, store_multi_source_engine_signals, store_trading_analysis_history
 from logger import get_logger
-from trader.data.enhanced_fetcher import EnhancedDataFetcher
-from trader.data.data_quality import DataQualityAnalyzer
+from trader.data.source_data import EnhancedDataFetcher
+from trader.data.source_data import DataQualityAnalyzer
 
 class MultiSourceRuleBasedEngine:
     """

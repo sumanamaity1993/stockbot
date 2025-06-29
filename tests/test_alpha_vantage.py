@@ -1,50 +1,48 @@
 #!/usr/bin/env python3
 """
-Test script to verify Alpha Vantage API key setup
+Test script for Alpha Vantage API functionality
 """
 
-import os
 import sys
-from dotenv import load_dotenv
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Add the project root to the path
-sys.path.append(os.path.dirname(__file__))
+import pandas as pd
+from datetime import datetime, timedelta
 
-from trader.data.enhanced_fetcher import EnhancedDataFetcher
-from trader.data.config import DATA_FETCHER_CONFIG
+# Test imports
+from trader.data.source_data import EnhancedDataFetcher
+from trader.data.source_data import SOURCE_DATA_FETCHER_CONFIG
 
 def test_alpha_vantage():
-    """Test Alpha Vantage API key setup"""
-    print("🔑 TESTING ALPHA VANTAGE API KEY")
+    """Test Alpha Vantage API functionality"""
+    print("🧪 Testing Alpha Vantage API")
     print("=" * 40)
     
     # Load environment variables
+    from dotenv import load_dotenv
     load_dotenv()
     
-    # Check if API key is set
+    # Check if API key is available
     api_key = os.getenv('ALPHA_VANTAGE_API_KEY')
     if not api_key:
-        print("❌ ALPHA_VANTAGE_API_KEY not found in .env file")
-        print("💡 Please add: ALPHA_VANTAGE_API_KEY=your_api_key_here")
+        print("❌ ALPHA_VANTAGE_API_KEY not found in environment variables")
+        print("   Please set your Alpha Vantage API key in .env file")
         return False
     
-    if api_key == "your_api_key_here":
-        print("❌ Please replace 'your_api_key_here' with your actual API key")
-        return False
+    print(f"✅ Alpha Vantage API key found: {api_key[:8]}...")
     
-    print(f"✅ API Key found: {api_key[:8]}...{api_key[-4:]}")
-    
-    # Update config with API key
-    config = DATA_FETCHER_CONFIG.copy()
-    config['ALPHA_VANTAGE_API_KEY'] = api_key
-    
-    # Initialize enhanced fetcher
-    print("\n🔄 Initializing Enhanced Data Fetcher...")
-    fetcher = EnhancedDataFetcher(config)
-    
-    # Test with Alpha Vantage only
-    print("\n📊 Testing Alpha Vantage data source...")
+    # Test enhanced fetcher with Alpha Vantage
     try:
+        config = SOURCE_DATA_FETCHER_CONFIG.copy()
+        config['ALPHA_VANTAGE_API_KEY'] = api_key
+        
+        # Initialize enhanced fetcher
+        print("\n🔄 Initializing Enhanced Data Fetcher...")
+        fetcher = EnhancedDataFetcher(config)
+        
+        # Test with Alpha Vantage only
+        print("\n📊 Testing Alpha Vantage data source...")
         df = fetcher.fetch_ohlc('AAPL', sources=['alpha_vantage'], period='1mo')
         
         if df is not None and not df.empty:
