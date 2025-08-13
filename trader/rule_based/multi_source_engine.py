@@ -18,6 +18,7 @@ from trader.rule_based.strategies.simple_moving_average import SimpleMovingAvera
 from trader.rule_based.strategies.exponential_moving_average import ExponentialMovingAverageStrategy
 from trader.rule_based.strategies.rsi_strategy import RSIStrategy
 from trader.rule_based.strategies.macd_strategy import MACDStrategy
+from trader.rule_based.strategies.bollinger_bands_strategy import BollingerBandsStrategy
 from postgres import init_multi_source_ohlcv_tables, load_ohlcv_data, check_data_freshness, init_trading_signals_tables, store_multi_source_engine_signals, store_trading_analysis_history
 from logger import get_logger
 from trader.data import get_source_manager
@@ -79,6 +80,8 @@ class MultiSourceRuleBasedEngine:
                 strategies.append(RSIStrategy(**params))
             elif strategy_name == "MACDStrategy":
                 strategies.append(MACDStrategy(**params))
+            elif strategy_name == "BollingerBandsStrategy":
+                strategies.append(BollingerBandsStrategy(**params))
         
         return strategies
     

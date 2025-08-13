@@ -5,6 +5,7 @@ from trader.rule_based.strategies.simple_moving_average import SimpleMovingAvera
 from trader.rule_based.strategies.exponential_moving_average import ExponentialMovingAverageStrategy
 from trader.rule_based.strategies.rsi_strategy import RSIStrategy
 from trader.rule_based.strategies.macd_strategy import MACDStrategy
+from trader.rule_based.strategies.bollinger_bands_strategy import BollingerBandsStrategy
 from logger import get_logger
 import time
 
@@ -45,6 +46,8 @@ class RuleBasedEngine:
                     self.strategies.append(RSIStrategy(**params))
                 elif strategy_name == "MACDStrategy":
                     self.strategies.append(MACDStrategy(**params))
+                elif strategy_name == "BollingerBandsStrategy":
+                    self.strategies.append(BollingerBandsStrategy(**params))
                 else:
                     self.logger.warning(f"Unknown strategy: {strategy_name}")
             

@@ -58,6 +58,14 @@ RULE_BASED_CONFIG = {
                 "slow_period": 26,
                 "signal_period": 9
             }
+        },
+        {
+            "name": "BollingerBandsStrategy",
+            "params": {
+                "period": 20,
+                "std_dev": 2.0,
+                "squeeze_threshold": 0.15
+            }
         }
     ],
     

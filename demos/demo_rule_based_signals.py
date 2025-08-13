@@ -15,6 +15,7 @@ from trader.rule_based.strategies.simple_moving_average import SimpleMovingAvera
 from trader.rule_based.strategies.exponential_moving_average import ExponentialMovingAverageStrategy
 from trader.rule_based.strategies.rsi_strategy import RSIStrategy
 from trader.rule_based.strategies.macd_strategy import MACDStrategy
+from trader.rule_based.strategies.bollinger_bands_strategy import BollingerBandsStrategy
 from logger import get_logger
 
 def demo_rule_based_signals():
@@ -41,7 +42,8 @@ def demo_rule_based_signals():
         SimpleMovingAverageStrategy(short_window=5, long_window=10),
         ExponentialMovingAverageStrategy(short_window=5, long_window=10),
         RSIStrategy(period=7, oversold=30, overbought=70),
-        MACDStrategy(fast_period=8, slow_period=15, signal_period=5)
+        MACDStrategy(fast_period=8, slow_period=15, signal_period=5),
+        BollingerBandsStrategy(period=15, std_dev=2.0, squeeze_threshold=0.12)
     ]
     
     print("🔧 Configuration:")
